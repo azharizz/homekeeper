@@ -128,6 +128,7 @@ export function Icon({ name, size = 20 }) {
       "M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8M9 3h6l1 3 3 1 2 5-2 5-3 1-1 3H9l-1-3-3-1-2-5 2-5 3-1Z",
     edit: "m15 4 5 5M4 20l5-1L21 7l-4-4L5 15Z",
     download: "M12 3v12m-5-5 5 5 5-5M4 16v5h16v-5",
+    cube: "m12 3 9 5v8l-9 5-9-5V8Zm0 10v8M3 8l9 5 9-5M7.5 5.5l9 5",
   };
   return (
     <svg
@@ -219,7 +220,12 @@ export function Editor({ spec, onSave, onCancel, disabled = false }) {
           <label className="field" key={name}>
             <span>{label}</span>
             {options ? (
-              <select value={values[name] ?? ""} onChange={change} name={name}>
+              <select
+                aria-label={label}
+                value={values[name] ?? ""}
+                onChange={change}
+                name={name}
+              >
                 {options.map((v) => (
                   <option key={v} value={v}>
                     {v}
@@ -228,6 +234,7 @@ export function Editor({ spec, onSave, onCancel, disabled = false }) {
               </select>
             ) : type === "textarea" ? (
               <textarea
+                aria-label={label}
                 rows={3}
                 name={name}
                 value={values[name] ?? ""}
@@ -237,6 +244,7 @@ export function Editor({ spec, onSave, onCancel, disabled = false }) {
               />
             ) : (
               <input
+                aria-label={label}
                 name={name}
                 type={type}
                 value={values[name] ?? ""}

@@ -1,4 +1,4 @@
-import React, { useRef, useState } from "react";
+import React, { useCallback, useRef, useState } from "react";
 import {
   careRequest,
   Icon,
@@ -9,6 +9,7 @@ import {
 } from "./components.jsx";
 
 export function Conversation({
+  hidden,
   home,
   status,
   session,
@@ -34,6 +35,12 @@ export function Conversation({
   const [listening, setListening] = useState(false),
     [visibleCount, setVisibleCount] = useState(20);
   const recognition = useRef(null);
+  const visibleRef = useCallback(
+    (node) => {
+      if (node?.hidden) recognition.current?.stop();
+    },
+    [hidden],
+  );
   const SpeechRecognition =
     window.SpeechRecognition || window.webkitSpeechRecognition;
   const messages = (session?.messages || []).filter(
@@ -93,6 +100,8 @@ export function Conversation({
   const hasMessages = messages.length > 0;
   return (
     <main
+      hidden={hidden}
+      ref={visibleRef}
       className={`conversation ${hasMessages ? "started" : "empty"}`}
       aria-label="Conversation"
     >

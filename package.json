@@ -3,17 +3,21 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
+  "workspaces": ["features/roomtrace/web"],
   "engines": {
     "node": ">=24.0.0"
   },
   "scripts": {
-    "build": "vite build",
+    "build": "vite build && npm run build --workspace=roomtrace-web",
     "start": "node --env-file-if-exists=.env alexa_host/server.js",
+    "start:all": "node --env-file-if-exists=.env scripts/start.js",
+    "roomtrace": "node --env-file-if-exists=.env scripts/start.js roomtrace",
     "capability": "node --env-file-if-exists=.env capability/server.js",
     "test": "node --test tests/*.test.js",
     "check:live": "node --env-file=.env scripts/live-check.js",
     "setup": "node scripts/setup.js",
     "check:browser": "node scripts/browser-check.js",
+    "check:roomtrace": "node --env-file-if-exists=.env scripts/roomtrace-check.js",
     "format": "prettier --write capability alexa_host web scripts tests"
   },
   "dependencies": {

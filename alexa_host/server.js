@@ -5,6 +5,7 @@ import { z } from "zod";
 import { createAgent } from "./agent.js";
 import { errorHandler } from "../capability/server.js";
 import { UserError } from "../capability/store.js";
+import { roomtraceProxy } from "./roomtrace.js";
 
 export function createHost(config) {
   const app = express();
@@ -36,6 +37,13 @@ export function createHost(config) {
   });
   app.get("/health", (_req, res) =>
     res.json({ status: "ok", service: "homekeeper-local-host" }),
+  );
+  app.use(
+    "/roomtrace",
+    roomtraceProxy({
+      roomtraceUrl: config.roomtraceUrl || "http://127.0.0.1:8790",
+      token: config.token,
+    }),
   );
   app.use("/api", (_req, res, next) => {
     res.set("Cache-Control", "no-store");
@@ -160,6 +168,7 @@ if (import.meta.url === pathToFileURL(process.argv[1]).href) {
     path: process.env.CHAT_DB_PATH || "data/conversations.sqlite",
     token: process.env.HOMEKEEPER_TOKEN,
     capabilityUrl,
+    roomtraceUrl: process.env.ROOMTRACE_URL || "http://127.0.0.1:8790",
     mcpUrl: `${capabilityUrl}/mcp`,
     model: process.env.NEBIUS_MODEL,
     apiKey: process.env.NEBIUS_API_KEY,

@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { Conversation } from "./Conversation.jsx";
 import { HomePanel } from "./HomePanel.jsx";
+import { RoomTrace } from "./roomtrace/RoomTrace.jsx";
 import {
   api,
   emptyHome,
@@ -25,7 +26,11 @@ export function App({ initial }) {
     [sessions, setSessions] = useState(initial[2].value || []);
   const [session, setSession] = useState(initial[3]?.value || null),
     [panel, setPanel] = useState(
-      new URLSearchParams(location.search).has("item") ? "items" : null,
+      new URLSearchParams(location.search).get("view") === "roomtrace"
+        ? "roomtrace"
+        : new URLSearchParams(location.search).has("item")
+          ? "items"
+          : null,
     );
   const [itemId, setItemId] = useState(
       new URLSearchParams(location.search).get("item"),
@@ -202,9 +207,14 @@ export function App({ initial }) {
     navigation.find(([name]) => name === panel)?.[2] ||
     (panel === "chats" ? "Conversations" : "Settings");
   return (
-    <div className={`app-shell ${panel ? "panel-open" : ""}`}>
-      <a className="skip-link" href="#message">
-        Skip to conversation
+    <div
+      className={`app-shell ${panel && panel !== "roomtrace" ? "panel-open" : ""}`}
+    >
+      <a
+        className="skip-link"
+        href={panel === "roomtrace" ? "#roomtrace" : "#message"}
+      >
+        {panel === "roomtrace" ? "Skip to RoomTrace" : "Skip to conversation"}
       </a>
       <header className="app-header">
         <button
@@ -243,6 +253,15 @@ export function App({ initial }) {
           <span className="tooltip">Conversations</span>
         </button>
         <span className="rail-divider" />
+        <button
+          className={`rail-button ${panel === "roomtrace" ? "active" : ""}`}
+          aria-label="RoomTrace"
+          aria-current={panel === "roomtrace" ? "page" : undefined}
+          onClick={() => togglePanel("roomtrace")}
+        >
+          <Icon name="cube" />
+          <span className="tooltip">RoomTrace</span>
+        </button>
         {navigation.map(([name, icon, label]) => (
           <button
             key={name}
@@ -268,6 +287,7 @@ export function App({ initial }) {
         </div>
       )}
       <Conversation
+        hidden={panel === "roomtrace"}
         home={home}
         status={status}
         session={session}
@@ -290,7 +310,8 @@ export function App({ initial }) {
         onItem={openItem}
         onAsk={ask}
       />
-      {panel && (
+      {panel === "roomtrace" && <RoomTrace />}
+      {panel && panel !== "roomtrace" && (
         <aside
           className="side-panel"
           aria-label={title}

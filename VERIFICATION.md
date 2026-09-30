@@ -1,4 +1,30 @@
-# Latest revision status: built locally, tests deferred
+# Current integration: RoomTrace in HomeKeeper
+
+Verified 2026-09-30. RoomTrace is a self-contained feature in `features/roomtrace/`, reached through HomeKeeper's navigation and same-origin streaming gateway. Its modeling agent remains the real Codex MCP workflow. No hosted generation API or Pascal runtime is connected.
+
+| Check | Observed result |
+| --- | --- |
+| Household regression and gateway | `npm test` passed the persistence/lifecycle suite, agent permission checks and proxy transport checks, including a streamed 14 MB upload, credential replacement, range/download headers and upstream failure recovery. |
+| Browser regression | `npm run check:browser` passed desktop forms, uploads, task completion, memory correction/removal, pagination and search in isolated household storage. |
+| Feature integration | `npm run check:roomtrace` passed with HomeKeeper's own Python environment. It ran real isolated geometry, household and host services and uploaded four photographs through the gateway. Preprocessing reached `awaiting_agent`; a fresh MCP process inspected all four photos, asset evidence and three material previews, then published the saved agent-authored document for those same views. The actual mesh export reached `ready` at revision 1, rendered in HomeKeeper and downloaded as GLB. This is an integration replay, not newly inferred geometry or evidence of another room's accuracy. |
+| Saved-model workspace | The integration check opened an actual saved architecture capture, loaded its source photos and GLB, rendered its 3D canvas, and opened measurements and the walkthrough. Conversation drafts survived navigation, leaving removed the camera iframe, reopening restored the space, and New space worked afterward. No uncaught browser errors or horizontal overflow at 1440 px and 1024 px. |
+| Real MCP | The stdio tool check called the actual HomeKeeper gateway, inspected stored geometry/evidence and source images, and returned an actual photo-overlay PNG. Invalid map IDs returned explicit tool errors. The existing Codex `roomtrace` registration now selects HomeKeeper's interpreter and module. A fresh process from that registration initialized all 31 tools and listed the 11 captures through the deployed gateway. Restart the existing RoomTrace connection to replace its old process. |
+| Geometry regression | Python API, appearance, architecture, architectural accuracy, assets, fusion, geometry, refinement, structure and walkthrough checks passed. JavaScript camera and walkthrough checks passed. These establish tested computations, not surveyed physical accuracy. |
+| Builds and CPU containers | Both web bundles and Docker images built. The RoomTrace CPU image passed its actual API authentication, origin/host, camera, upload and path boundary check. `docker compose up --build -d` started all three services. The deployed gateway returned 11 saved captures; a browser loaded the real living-room model, measurements and walkthrough without uncaught errors. Existing household/chat volumes were reused. |
+| Capture preservation | All 11 registered captures and the asset library were copied from the previous workspace. Stored job payloads and every capture/asset file matched the source byte-for-byte. Originals were retained. Captures, credentials, weights, environments and build outputs are ignored by Git. |
+| Interface review | Inspected `roomtrace-capture.png`, `roomtrace-model.png`, `roomtrace-published.png` and `homekeeper-roomtrace-docker.png` in `.impeccable/review/`. The workspace retains HomeKeeper's typography, colors and single outer rail. The Impeccable detector returned no findings. |
+
+The browser checks found and corrected a redirect loop, a WebAssembly CSP restriction that prevented mesh decoding, unstable populated-form accessible labels and New space selection after reopening. The feature CSP permits WebAssembly only within the RoomTrace surface; HomeKeeper's conversation CSP retains its existing restrictions.
+
+The handoff replay also rejected a second publication with stale revision 0 and preserved revision 1. Saved input was compared against the current schema's normalized document, which supplies additive feature defaults to older authoring documents. All test captures and services were isolated and removed afterward; the original 11 captures were retained.
+
+Codex's stored RoomTrace registration points to HomeKeeper. Its Settings UI is unavailable to computer automation here, so the existing chat's MCP process was not restarted through that UI. Fresh stdio initialization and actual calls using the updated interpreter, server and gateway were verified. Existing chats can restart RoomTrace in MCP settings; new connections use the updated registration.
+
+Not exercised in this revision: live Nebius reasoning, CUDA inference, a new full MapAnything reconstruction, browser camera hardware, physical positioning or real walking safety. The geometry bundle is 1.35 MB before compression and loads only when RoomTrace opens; detailed rendering is not part of conversation startup. Dimensions and step counts remain estimates without genuine physical measurement evidence.
+
+---
+
+# Historical revision status: built locally, tests deferred
 
 The Alexa-themed desktop and document-intake revision on 2026-09-20 is implemented and running in local Docker. The user explicitly said, "Do entire code first until 100%. Dont test it yet!" Source implementation finished before the Docker build and attempted screenshot-only inspection. Automated and live-model tests remain unrun. No production-readiness or pixel-perfect matching claim is made for this revision.
 

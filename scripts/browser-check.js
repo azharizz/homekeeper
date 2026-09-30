@@ -34,7 +34,7 @@ const hostServer = host.app.listen(0, "127.0.0.1");
 await once(hostServer, "listening");
 const hostUrl = `http://127.0.0.1:${hostServer.address().port}`;
 config.hosts.push(new URL(hostUrl).host);
-let browser;
+let browser, page;
 const screenshots = ".impeccable/review";
 mkdirSync(screenshots, { recursive: true });
 try {
@@ -42,7 +42,7 @@ try {
     channel: process.env.BROWSER_CHANNEL || "chrome",
     headless: true,
   });
-  const page = await browser.newPage({
+  page = await browser.newPage({
     viewport: { width: 1440, height: 1000 },
     reducedMotion: "reduce",
   });
@@ -69,13 +69,11 @@ try {
     .locator(".record-section > summary")
     .filter({ hasText: "Files" })
     .click();
-  await page
-    .getByLabel("Upload PDF or text")
-    .setInputFiles({
-      name: "plant.txt",
-      mimeType: "text/plain",
-      buffer: Buffer.from("TEST ONLY plant instructions"),
-    });
+  await page.getByLabel("Upload PDF or text").setInputFiles({
+    name: "plant.txt",
+    mimeType: "text/plain",
+    buffer: Buffer.from("TEST ONLY plant instructions"),
+  });
   await page.getByRole("link", { name: "plant.txt", exact: true }).waitFor();
   await page.screenshot({
     path: `${screenshots}/passport-alexa-theme.png`,
@@ -140,13 +138,11 @@ try {
     "Search resets pagination",
   );
   await page.getByRole("button", { name: "Files", exact: true }).click();
-  await page
-    .getByLabel("Upload PDF or text")
-    .setInputFiles({
-      name: "unfiled.txt",
-      mimeType: "text/plain",
-      buffer: Buffer.from("TEST ONLY unidentified receipt"),
-    });
+  await page.getByLabel("Upload PDF or text").setInputFiles({
+    name: "unfiled.txt",
+    mimeType: "text/plain",
+    buffer: Buffer.from("TEST ONLY unidentified receipt"),
+  });
   await page.getByRole("link", { name: "unfiled.txt", exact: true }).waitFor();
   assert.equal(
     capability.store.home().documents.find((d) => d.title === "unfiled.txt")
@@ -211,6 +207,21 @@ try {
   console.log(
     "PASS: desktop shell, simplified item entry, uploads, one-click completion, memory correction/removal, pagination and search. Real streamed model interaction checked only when configured.",
   );
+} catch (error) {
+  if (page) {
+    await page.screenshot({
+      path: `${screenshots}/homekeeper-check-failure.png`,
+      fullPage: true,
+    });
+    console.error(
+      "Visible editor:",
+      await page
+        .locator(".editor")
+        .innerText()
+        .catch(() => "No editor open"),
+    );
+  }
+  throw error;
 } finally {
   if (browser) await browser.close();
   await new Promise((resolve) => hostServer.close(resolve));

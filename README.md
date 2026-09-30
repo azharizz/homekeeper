@@ -13,7 +13,7 @@ npm run setup
 docker compose up --build -d
 ```
 
-Open http://localhost:8789. The MCP capability endpoint is http://localhost:8788/mcp and requires the generated HOMEKEEPER_TOKEN bearer credential. Both ports bind only to loopback. The two services communicate over the Compose network.
+Open http://localhost:8789. RoomTrace is in the left navigation. The MCP capability endpoint is http://localhost:8788/mcp and requires the generated HOMEKEEPER_TOKEN bearer credential. Both published ports bind only to loopback. The RoomTrace geometry service stays inside the Compose network.
 
 If your .env already exists, setup preserves its values and adds missing settings. It never prints a key. Never paste a secret into browser code or a conversation. After changing .env:
 
@@ -24,6 +24,29 @@ docker compose up -d --force-recreate local-host
 Home records and forms work without a model. The conversation shows missing configuration instead of pretending to be intelligent. Set NEBIUS_MODEL to a Nebius model that supports function calling. NEBIUS_BASE_URL must be its real OpenAI-compatible API root, ending at `/v1`, not a chat-completions path. No model is hardcoded.
 
 ## Use HomeKeeper
+
+### RoomTrace
+
+Open **RoomTrace** in the left rail to create or open a 3D space. Its complete modeling workspace lives under `features/roomtrace/`, including photo/video intake, structured architectural modeling through Codex MCP, the explicit MapAnything alternative, texture authoring, photo alignment, measurements in metres, and model walkthroughs. It uses the same typography and colors, with one HomeKeeper navigation rail. Returning to Conversation preserves your draft. Leaving RoomTrace stops its camera by closing the workspace; reopening restores the selected space.
+
+The host streams `/roomtrace/` requests to the Python service, including uploads, images and GLB downloads. Household records and geometry have separate stores. Structured generation still runs through Codex using the supplied modeling request; HomeKeeper's Nebius conversation is not silently given modeling tools. There are no hosted generation APIs or Pascal connections. Estimated geometry and step counts do not establish physical accuracy or a verified walking route.
+
+For native local execution, install the Python requirements and build both web applications:
+
+```sh
+python3 -m venv .venv
+.venv/bin/pip install -r features/roomtrace/requirements.txt
+.venv/bin/pip install --no-deps -r features/roomtrace/requirements-engines.txt
+npm ci
+npm run setup
+# Set ROOMTRACE_PYTHON to the absolute .venv/bin/python path in .env.
+npm run build
+npm run start:all
+```
+
+`npm run start:all` starts records, geometry and the host together and stops them together. `npm start`, `npm run capability` and `npm run roomtrace` start individual services. RoomTrace's native port defaults to 8790. `ROOMTRACE_URL` selects its upstream address when using a different port. Python configuration and the MCP server read HomeKeeper's root `.env`; credentials stay server-side. See [RoomTrace setup and MCP](features/roomtrace/README.md).
+
+Local captures, revisions and asset blobs live in `features/roomtrace/data/`, which is ignored by Git and mounted into the RoomTrace container. Existing captures were copied here from the previous local workspace without changing the originals. A fresh clone contains no private home captures. Back up this directory in addition to the household/chat Docker volumes, with services stopped for a consistent backup. Downloaded engine weights live in `features/roomtrace/models/`. Setup records your local UID/GID so the non-root geometry container can write these bind-mounted directories. Run either native services or Compose against this data, not both at once.
 
 Start in the conversation. Tell it what to remember or what you need done. For example: ask it to remember a plant's location, keep a shopping list, schedule a recurring chore, find a household contact, summarize upcoming work or recall a previous repair. These are open-ended model requests, not hardcoded routes.
 
@@ -64,9 +87,10 @@ React browser
       -> forms/uploads -> capability/server.js
       -> agent.js -> Nebius -> MCP client -> capability/server.js
                                                 -> tools.js -> store.js -> SQLite
+  -> /roomtrace/ -> features/roomtrace Python API -> local captures and geometry
 ```
 
-`capability/` is the requested Alexa-style capability container folder. `alexa_host/` is the local conversation host. The host retains conversation transcripts in its own volume; only the capability service owns household records. All tool definitions and direct form writes use the same validation and commands. No ORM, vector database, agent framework or graph database is needed for this scope.
+`capability/` is the requested Alexa-style capability container folder. `alexa_host/` is the local conversation host. `features/roomtrace/` owns the geometry service, its web workspace and its tests. `web/roomtrace/` contains only the HomeKeeper menu surface. The host retains conversation transcripts in its own volume; only the capability service owns household records. All tool definitions and direct form writes use the same validation and commands. No ORM, vector database, agent framework or graph database is needed for this scope.
 
 The research and implementation decisions are in RESEARCH_AND_PLAN.md. Product constraints are in PRODUCT.md. The interface is documented in DESIGN.md.
 
@@ -92,12 +116,13 @@ The services use non-root containers, read-only filesystems, dropped capabilitie
 
 ## Verification
 
-The latest desktop and intake revision is implemented and built in local Docker, but NOT FUNCTIONALLY TESTED, as requested. Both services are running. Screenshot-only inspection was attempted after implementation, but Chrome blocks localhost with ERR_BLOCKED_BY_CLIENT. Automated, browser and real-model checks remain unrun. VERIFICATION.md separates this status from earlier results. Run these when testing is requested:
+The HomeKeeper and RoomTrace integration has passed the system suites, real Python geometry/API checks, browser navigation and form checks, actual capture uploads, saved-model rendering and MCP calls through the host gateway. Desktop screenshots were inspected. Both Docker images build, and the RoomTrace image passed API boundary checks on CPU. This verifies the local integration; it does not certify physical measurement accuracy, live Nebius reasoning, CUDA execution or a safe walking route. See VERIFICATION.md for the current results and historical checks.
 
 ```sh
 npm test
 npm run build
 npm run check:browser
+npm run check:roomtrace
 npm run check:live
 ```
 

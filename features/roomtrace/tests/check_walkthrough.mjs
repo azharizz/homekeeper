@@ -4,7 +4,7 @@ import {
   stepProgress,
   insideWalkingArea,
   isClickGesture,
-} from "../web/src/walkthrough-math.js";
+} from "../../../web/spaces/walkthrough-math.js";
 
 const path = [
   [0, 0, 0],

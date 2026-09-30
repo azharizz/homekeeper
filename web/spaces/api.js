@@ -1,4 +1,4 @@
-export const apiUrl = (path) => `${import.meta.env.BASE_URL}api${path}`;
+export const apiUrl = (path) => `/roomtrace/api${path}`;
 
 export async function request(path, options) {
   const response = await fetch(apiUrl(path), options);

@@ -51,11 +51,6 @@ test("RoomTrace gateway streams, authenticates, prefixes redirects and reports o
     );
     assert.equal(model.headers.get("content-range"), "bytes 0-3/8");
     assert.match(model.headers.get("content-disposition"), /surface\.glb/);
-    assert.equal(model.headers.get("x-frame-options"), "SAMEORIGIN");
-    assert.match(
-      model.headers.get("content-security-policy"),
-      /frame-ancestors 'self'/,
-    );
     assert.equal(model.headers.get("set-cookie"), null);
     const bytes = Buffer.alloc(14 * 1024 * 1024, 179);
     const upload = await fetch(`${url}/api/maps`, {
@@ -79,12 +74,11 @@ test("RoomTrace gateway streams, authenticates, prefixes redirects and reports o
     assert.equal(unavailable.status, 503);
     assert.match(
       (await unavailable.json()).detail,
-      /Start the RoomTrace service/,
+      /Start the geometry service/,
     );
     const page = await fetch(`${url}/`, { headers: { Accept: "text/html" } });
     assert.equal(page.status, 503);
-    assert.match(await page.text(), /Try again/);
-    assert.equal(page.headers.get("x-frame-options"), "SAMEORIGIN");
+    assert.match((await page.json()).detail, /Start the geometry service/);
   } finally {
     if (peer.listening) await new Promise((resolve) => peer.close(resolve));
     await new Promise((resolve) => host.close(resolve));

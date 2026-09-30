@@ -1,7 +1,6 @@
-import React, { useState } from "react";
+import React, { lazy, Suspense, useState } from "react";
 import { Conversation } from "./Conversation.jsx";
 import { HomePanel } from "./HomePanel.jsx";
-import { RoomTrace } from "./roomtrace/RoomTrace.jsx";
 import {
   api,
   emptyHome,
@@ -11,6 +10,8 @@ import {
   PageList,
   uploadDocument,
 } from "./components.jsx";
+
+const Spaces = lazy(() => import("./spaces/Spaces.jsx"));
 
 const navigation = [
   ["items", "book", "Your home"],
@@ -26,8 +27,8 @@ export function App({ initial }) {
     [sessions, setSessions] = useState(initial[2].value || []);
   const [session, setSession] = useState(initial[3]?.value || null),
     [panel, setPanel] = useState(
-      new URLSearchParams(location.search).get("view") === "roomtrace"
-        ? "roomtrace"
+      new URLSearchParams(location.search).get("view") === "spaces"
+        ? "spaces"
         : new URLSearchParams(location.search).has("item")
           ? "items"
           : null,
@@ -208,13 +209,13 @@ export function App({ initial }) {
     (panel === "chats" ? "Conversations" : "Settings");
   return (
     <div
-      className={`app-shell ${panel && panel !== "roomtrace" ? "panel-open" : ""}`}
+      className={`app-shell ${panel && panel !== "spaces" ? "panel-open" : ""}`}
     >
       <a
         className="skip-link"
-        href={panel === "roomtrace" ? "#roomtrace" : "#message"}
+        href={panel === "spaces" ? "#spaces" : "#message"}
       >
-        {panel === "roomtrace" ? "Skip to RoomTrace" : "Skip to conversation"}
+        {panel === "spaces" ? "Skip to Spaces" : "Skip to conversation"}
       </a>
       <header className="app-header">
         <button
@@ -254,13 +255,13 @@ export function App({ initial }) {
         </button>
         <span className="rail-divider" />
         <button
-          className={`rail-button ${panel === "roomtrace" ? "active" : ""}`}
-          aria-label="RoomTrace"
-          aria-current={panel === "roomtrace" ? "page" : undefined}
-          onClick={() => togglePanel("roomtrace")}
+          className={`rail-button ${panel === "spaces" ? "active" : ""}`}
+          aria-label="Spaces"
+          aria-current={panel === "spaces" ? "page" : undefined}
+          onClick={() => togglePanel("spaces")}
         >
           <Icon name="cube" />
-          <span className="tooltip">RoomTrace</span>
+          <span className="tooltip">Spaces</span>
         </button>
         {navigation.map(([name, icon, label]) => (
           <button
@@ -287,7 +288,7 @@ export function App({ initial }) {
         </div>
       )}
       <Conversation
-        hidden={panel === "roomtrace"}
+        hidden={panel === "spaces"}
         home={home}
         status={status}
         session={session}
@@ -310,8 +311,18 @@ export function App({ initial }) {
         onItem={openItem}
         onAsk={ask}
       />
-      {panel === "roomtrace" && <RoomTrace />}
-      {panel && panel !== "roomtrace" && (
+      {panel === "spaces" && (
+        <Suspense
+          fallback={
+            <main className="spaces-loading" role="status">
+              Opening Spaces…
+            </main>
+          }
+        >
+          <Spaces />
+        </Suspense>
+      )}
+      {panel && panel !== "spaces" && (
         <aside
           className="side-panel"
           aria-label={title}

@@ -1,13 +1,12 @@
 # RoomTrace in HomeKeeper
 
-Source imported from [RoomTrace](https://github.com/azharizz/photo_to_3d_model), commit `3a8d98f`. This directory is a self-contained Python geometry service and independently built React workspace. It does not depend on the former sibling checkout, Homebuddy, Pascal or any desktop modeling app. Research archives and historical screenshots stay in the original repository.
+Source imported from [RoomTrace](https://github.com/azharizz/photo_to_3d_model), commit `3a8d98f`. This directory owns the Python geometry service. The native Spaces React page lives at `web/spaces/` in HomeKeeper’s single frontend build. It does not depend on the former sibling checkout, Homebuddy, Pascal or any desktop modeling app. Research archives and historical screenshots stay in the original repository.
 
 ```text
 app/api/           Uploads, geometry and asset endpoints
 app/architecture/  Modeling contracts, geometry, evidence and walkthroughs
 app/assets/        Immutable authored/imported GLB library
 app/mcp_server.py  Real MCP stdio tools used by Codex
-web/src/           Modeling workspace, served under /roomtrace/
 tests/             Geometry, API, asset, camera and MCP checks
 data/              Private captures, revisions and assets, ignored by Git
 models/            Downloaded engine weights, ignored by Git

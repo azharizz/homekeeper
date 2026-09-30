@@ -153,6 +153,13 @@ fieldset {
   grid-template-columns: 0 minmax(0, 1fr) 0;
   isolation: isolate;
 }
+.app-shell > .conversation[hidden] {
+  display: none;
+}
+.spaces-loading {
+  grid-column: 2;
+  padding: 112px 24px 24px 112px;
+}
 .app-shell::before {
   content: "";
   position: fixed;

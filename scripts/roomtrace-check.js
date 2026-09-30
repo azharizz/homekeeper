@@ -108,12 +108,12 @@ try {
   const url = `http://127.0.0.1:${hostServer.address().port}`;
   config.hosts.push(new URL(url).host);
   const api = `${url}/roomtrace/api`;
-  const document = await fetch(`${url}/roomtrace/`);
+  const document = await fetch(`${url}/`);
   assert.equal(document.status, 200);
-  assert.equal(document.headers.get("x-frame-options"), "SAMEORIGIN");
+  assert.equal(document.headers.get("x-frame-options"), "DENY");
   assert.match(
     document.headers.get("content-security-policy"),
-    /frame-ancestors 'self'/,
+    /frame-ancestors 'none'/,
   );
   assert.equal((await fetch(`${api}/health`)).status, 200);
   assert.equal((await fetch(`${api}/maps`)).status, 200);
@@ -212,18 +212,29 @@ try {
   await page
     .getByRole("heading", { name: "What can I take care of?" })
     .waitFor();
-  const draft = "Draft preserved across RoomTrace navigation";
+  const conversationStyle = await page
+    .locator(".conversation-intro h1")
+    .evaluate((node) => ({
+      font: getComputedStyle(node).font,
+      margin: getComputedStyle(node).margin,
+    }));
+  const draft = "Draft preserved across Spaces navigation";
   const canType = await page.locator("#message").isEnabled();
   if (canType) await page.locator("#message").fill(draft);
-  await page.getByRole("button", { name: "RoomTrace", exact: true }).click();
-  const frame = page.frameLocator('iframe[title="RoomTrace 3D workspace"]');
-  await frame
+  await page.getByRole("button", { name: "Spaces", exact: true }).click();
+  const spaces = page.locator(".spaces-workspace");
+  assert.equal(
+    await page.locator("iframe").count(),
+    0,
+    "Spaces renders in the native React tree",
+  );
+  await spaces
     .getByRole("button", { name: "New space", exact: true })
     .waitFor()
     .catch(async (error) => {
       mkdirSync(".impeccable/review", { recursive: true });
       await page.screenshot({
-        path: ".impeccable/review/roomtrace-failure.png",
+        path: ".impeccable/review/spaces-failure.png",
         fullPage: true,
       });
       console.error("Workspace errors:", errors);
@@ -234,59 +245,77 @@ try {
     false,
   );
   assert.equal(
-    await frame
-      .getByRole("navigation", { name: "RoomTrace navigation" })
-      .count(),
+    await spaces.getByRole("navigation", { name: "Spaces navigation" }).count(),
     1,
   );
   assert.equal(
-    await frame.locator(".rail, .brand, .sign-in").count(),
+    await spaces.locator(".rail, .brand, .sign-in").count(),
     0,
     "No duplicate app navigation or sign-in",
   );
   mkdirSync(".impeccable/review", { recursive: true });
   await page.screenshot({
-    path: ".impeccable/review/roomtrace-capture.png",
+    path: ".impeccable/review/spaces-capture.png",
     fullPage: true,
   });
   if (capture) {
-    await frame
+    await spaces
       .getByRole("button", { name: "Your spaces", exact: true })
       .click();
-    await frame
+    await spaces
       .getByRole("button", {
         name: new RegExp(capture.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),
       })
       .click();
-    await frame.locator("canvas").first().waitFor();
-    await frame.getByRole("button", { name: "Photos", exact: true }).click();
-    await frame.locator(".architecture-source img").first().waitFor();
-    await frame.getByRole("button", { name: "Objects", exact: true }).click();
-    await frame.getByRole("button", { name: "Measure", exact: true }).click();
-    await frame
+    await spaces.locator("canvas").first().waitFor();
+    const modelBounds = await spaces.locator(".model-layout").boundingBox();
+    assert.ok(
+      modelBounds.width > 1280,
+      "The model uses the available desktop page width",
+    );
+    await spaces.getByRole("button", { name: "Photos", exact: true }).click();
+    await spaces.locator(".architecture-source img").first().waitFor();
+    await spaces.getByRole("button", { name: "Objects", exact: true }).click();
+    await spaces.getByRole("button", { name: "Measure", exact: true }).click();
+    await spaces
       .getByRole("button", { name: "Walkthrough", exact: true })
       .click();
-    await frame.getByRole("region", { name: "Guided walkthrough" }).waitFor();
-    await frame
+    await spaces.getByRole("region", { name: "Guided walkthrough" }).waitFor();
+    await spaces
       .getByText("Checking floor clearance…", { exact: true })
       .waitFor({ state: "hidden" });
+    assert.equal(
+      await page.evaluate(
+        () => document.documentElement.scrollHeight > innerHeight,
+      ),
+      false,
+      "The desktop model fits the available viewport height",
+    );
     await page.screenshot({
-      path: ".impeccable/review/roomtrace-model.png",
+      path: ".impeccable/review/spaces-model.png",
       fullPage: true,
     });
   }
   await page.getByRole("button", { name: "Conversation", exact: true }).click();
   assert.equal(
-    await page.locator("iframe").count(),
+    await spaces.count(),
     0,
-    "Leaving closes the camera workspace",
+    "Leaving unmounts the modeling workspace and its camera",
   );
   assert.equal(
     await page.locator("#message").inputValue(),
     canType ? draft : "",
   );
-  await page.getByRole("button", { name: "RoomTrace", exact: true }).click();
-  if (capture) await frame.locator("canvas").first().waitFor();
+  assert.deepEqual(
+    await page.locator(".conversation-intro h1").evaluate((node) => ({
+      font: getComputedStyle(node).font,
+      margin: getComputedStyle(node).margin,
+    })),
+    conversationStyle,
+    "Feature styles do not leak into Conversation",
+  );
+  await page.getByRole("button", { name: "Spaces", exact: true }).click();
+  if (capture) await spaces.locator("canvas").first().waitFor();
   await page.setViewportSize({ width: 1024, height: 900 });
   assert.equal(
     await page.evaluate(
@@ -294,17 +323,13 @@ try {
     ),
     false,
   );
-  const content = page
-    .frames()
-    .find((frame) => frame.url().startsWith(`${url}/roomtrace/`));
-  assert.equal(
-    await content.evaluate(
-      () => document.documentElement.scrollWidth > innerWidth,
-    ),
-    false,
-  );
-  await frame.getByRole("button", { name: "New space", exact: true }).click();
-  await frame.getByRole("heading", { name: "Your space, in 3D." }).waitFor();
+  await page.screenshot({
+    path: ".impeccable/review/spaces-model-narrow.png",
+    fullPage: true,
+  });
+  await spaces.getByRole("button", { name: "New space", exact: true }).click();
+  await spaces.getByRole("heading", { name: "Your space, in 3D." }).waitFor();
+  await page.setViewportSize({ width: 1440, height: 1000 });
   assert.deepEqual(errors, [], "No uncaught UI errors");
   const mcp = spawn(
     process.env.ROOMTRACE_PYTHON || "python3",
@@ -342,20 +367,20 @@ try {
         .toString(),
       "glTF",
     );
-    await frame
+    await spaces
       .getByRole("button", { name: "Your spaces", exact: true })
       .click();
-    await frame.getByRole("button", { name: /TEST gateway capture/ }).click();
-    await frame.locator("canvas").first().waitFor();
-    await frame.getByRole("button", { name: "Measure", exact: true }).click();
-    await frame
+    await spaces.getByRole("button", { name: /TEST gateway capture/ }).click();
+    await spaces.locator("canvas").first().waitFor();
+    await spaces.getByRole("button", { name: "Measure", exact: true }).click();
+    await spaces
       .getByRole("button", { name: "Walkthrough", exact: true })
       .click();
-    await frame
+    await spaces
       .getByText("Checking floor clearance…", { exact: true })
       .waitFor({ state: "hidden" });
     await page.screenshot({
-      path: ".impeccable/review/roomtrace-published.png",
+      path: ".impeccable/review/spaces-published.png",
       fullPage: true,
     });
     assert.deepEqual(
@@ -367,8 +392,24 @@ try {
       "PASS: newly published four-photo capture renders through HomeKeeper, with measurement/walkthrough surfaces and an actual GLB download.",
     );
   }
+  engine.kill("SIGTERM");
+  await once(engine, "exit");
+  await page.goto(`${url}/?view=spaces`);
+  await spaces
+    .getByRole("button", { name: "Try again", exact: true })
+    .waitFor();
+  await page.screenshot({
+    path: ".impeccable/review/spaces-unavailable.png",
+    fullPage: true,
+  });
+  await page.getByRole("button", { name: "Conversation", exact: true }).click();
+  assert.equal(
+    await page.getByRole("main", { name: "Conversation" }).isVisible(),
+    true,
+  );
+  assert.deepEqual(errors, [], "A geometry outage does not crash HomeKeeper");
   console.log(
-    `PASS: actual gateway, security, desktop menu, draft retention, workspace lifecycle and MCP.${capture ? " Saved model, source images, real upload and walkthrough UI checked." : " Saved-model/upload checks skipped: no local architecture capture."}`,
+    `PASS: native React workspace without iframes, full desktop width, isolated styles, geometry outage recovery, actual gateway, security, desktop menu, draft retention, workspace lifecycle and MCP.${capture ? " Saved model, source images, real upload and walkthrough UI checked." : " Saved-model/upload checks skipped: no local architecture capture."}`,
   );
 } finally {
   if (browser) await browser.close();
@@ -377,8 +418,7 @@ try {
     await new Promise((resolve) => capabilityServer.close(resolve));
   host?.agent.close();
   capability?.store.close();
-  if (engine.exitCode === null) {
-    engine.kill("SIGTERM");
+  if (engine.kill("SIGTERM")) {
     await once(engine, "exit");
   }
   rmSync(temporary, { recursive: true, force: true });

@@ -1,5 +1,4 @@
 import { useRef, useState, useSyncExternalStore } from "react";
-import { createRoot } from "react-dom/client";
 import {
   QueryClient,
   QueryClientProvider,
@@ -42,6 +41,7 @@ function App() {
   const [help, setHelp] = useState(false);
   const libraryButton = useRef(null);
   const helpButton = useRef(null);
+  const main = useRef(null);
   const closeLibrary = () => {
     setLibrary(false);
     libraryButton.current?.focus();
@@ -77,11 +77,11 @@ function App() {
       : "";
     setLibrary(false);
     setHelp(false);
-    document.getElementById("main")?.focus();
+    main.current?.focus();
   }
   return (
     <div
-      className="roomtrace-app"
+      className="spaces-workspace"
       onKeyDown={(event) => {
         if (event.key === "Escape") {
           if (library) closeLibrary();
@@ -90,8 +90,8 @@ function App() {
       }}
     >
       <header className="module-toolbar">
-        <h1>RoomTrace</h1>
-        <nav aria-label="RoomTrace navigation">
+        <h1>Spaces</h1>
+        <nav aria-label="Spaces navigation">
           <button
             onClick={() => select(null)}
             aria-pressed={!selected && !library}
@@ -112,7 +112,7 @@ function App() {
         <button
           className="icon-button"
           ref={helpButton}
-          aria-label="How RoomTrace works"
+          aria-label="How Spaces works"
           aria-expanded={help}
           onClick={() => {
             setHelp(!help);
@@ -131,10 +131,7 @@ function App() {
         />
       )}
       {help && (
-        <aside
-          className="library-panel help-panel"
-          aria-label="About RoomTrace"
-        >
+        <aside className="library-panel help-panel" aria-label="About Spaces">
           <div className="panel-heading">
             <h2>How it works</h2>
             <button
@@ -165,8 +162,18 @@ function App() {
           </p>
         </aside>
       )}
-      <main id="main" tabIndex={-1}>
+      <main id="spaces" aria-label="Spaces" ref={main} tabIndex={-1}>
         <ErrorMessage error={health.error || maps.error} />
+        {(health.isError || maps.isError) && (
+          <button
+            onClick={() => {
+              health.refetch();
+              maps.refetch();
+            }}
+          >
+            Try again
+          </button>
+        )}
         {job ? (
           <Workspace key={job.id} job={job} />
         ) : selected && maps.isPending ? (
@@ -190,8 +197,10 @@ function App() {
   );
 }
 
-createRoot(document.getElementById("root")).render(
-  <QueryClientProvider client={client}>
-    <App />
-  </QueryClientProvider>,
-);
+export default function Spaces() {
+  return (
+    <QueryClientProvider client={client}>
+      <App />
+    </QueryClientProvider>
+  );
+}

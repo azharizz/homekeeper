@@ -3,12 +3,11 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "workspaces": ["features/roomtrace/web"],
   "engines": {
     "node": ">=24.0.0"
   },
   "scripts": {
-    "build": "vite build && npm run build --workspace=roomtrace-web",
+    "build": "vite build",
     "start": "node --env-file-if-exists=.env alexa_host/server.js",
     "start:all": "node --env-file-if-exists=.env scripts/start.js",
     "roomtrace": "node --env-file-if-exists=.env scripts/start.js roomtrace",
@@ -27,7 +26,11 @@
     "pdfjs-dist": "6.3.289",
     "react": "19.3.0",
     "react-dom": "19.3.0",
-    "zod": "^4.3.6"
+    "zod": "^4.3.6",
+    "@react-three/drei": "^10.7.0",
+    "@react-three/fiber": "^9.8.1",
+    "@tanstack/react-query": "^5.90.0",
+    "three": "^0.180.0"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "latest",

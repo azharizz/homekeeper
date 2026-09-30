@@ -1,10 +1,3 @@
-FROM node:24-bookworm-slim AS web
-WORKDIR /build
-COPY web/package*.json ./
-RUN npm ci --no-fund --no-audit
-COPY web/ ./
-RUN npm run build
-
 FROM python:3.11-slim-bookworm
 ARG COMPUTE_PROFILE=cpu
 WORKDIR /app/features/roomtrace
@@ -16,7 +9,6 @@ RUN pip install --no-cache-dir --no-deps -r requirements-engines.txt
 RUN useradd --uid 10001 --create-home roomtrace && mkdir data models && chown -R roomtrace:roomtrace /app
 COPY --chown=roomtrace:roomtrace app/ app/
 COPY --chown=roomtrace:roomtrace run.py ./
-COPY --from=web --chown=roomtrace:roomtrace /build/dist/ web/dist/
 USER roomtrace
 ENV ROOMTRACE_HOST=0.0.0.0 ROOMTRACE_PORT=8000 PYTHONUNBUFFERED=1 HF_HOME=/app/features/roomtrace/models
 EXPOSE 8000

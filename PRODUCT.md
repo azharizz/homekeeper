@@ -24,7 +24,7 @@ One trusted local household. Persistent items, facts, locations, contacts, prefe
 
 Device control, web search, purchases, external bookings and delivered notifications need real integrations and are not connected. This is a local host, not an Amazon Alexa+ deployment. Public deployment needs household identity, authorization, HTTPS and real platform onboarding.
 
-RoomTrace is an additional menu workspace for 4 to 12 room photographs or video frames. It preserves structured architectural modeling, photo textures, alignment, metre measurements, assets and virtual walkthroughs; MapAnything is a separate alternative. The host serves it on the same origin while household records and geometry retain separate stores. Structured authoring runs in the user's Codex conversation through real MCP tools. RoomTrace does not infer a physically verified walking route from appearance alone.
+Spaces is a native HomeKeeper React page for 4 to 12 room photographs or video frames. It preserves structured architectural modeling, photo textures, alignment, metre measurements, assets and virtual walkthroughs; MapAnything is a separate alternative. The host serves it on the same origin while household records and geometry retain separate stores. Structured authoring runs in the user's Codex conversation through real MCP tools. Spaces does not infer a physically verified walking route from appearance alone.
 
 ## Brand Commitments
 HomeKeeper. Calm, short language. No em dashes. One conversation first, records on demand.

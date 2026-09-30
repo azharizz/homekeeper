@@ -1,6 +1,6 @@
-// Run after the implementation-only pass: node web/check_capture.mjs
+// Capture intake contract shared by HomeKeeper Spaces.
 import assert from "node:assert/strict";
-import { captureProblem, mergeFiles } from "./src/capture.js";
+import { captureProblem, mergeFiles } from "../../../web/spaces/capture.js";
 
 const photos = Array.from({ length: 13 }, (_, i) => ({
   name: `${i}.jpg`,

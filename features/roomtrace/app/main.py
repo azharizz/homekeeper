@@ -1,4 +1,4 @@
-"""Single-user API and same-origin web serving."""
+"""Single-user geometry API. HomeKeeper owns the browser application."""
 
 import hmac
 import os
@@ -8,7 +8,6 @@ from urllib.parse import urlsplit
 import pycolmap
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
-from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
@@ -126,7 +125,3 @@ def login(body: Login, request: Request):
 app.include_router(map_routes.router)
 app.include_router(architecture_routes.router)
 app.include_router(asset_routes.router)
-
-build = config.ROOT / "web/dist"
-if build.is_dir():
-    app.mount("/", StaticFiles(directory=build, html=True), name="web")

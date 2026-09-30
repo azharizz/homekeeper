@@ -13,7 +13,7 @@ npm run setup
 docker compose up --build -d
 ```
 
-Open http://localhost:8789. RoomTrace is in the left navigation. The MCP capability endpoint is http://localhost:8788/mcp and requires the generated HOMEKEEPER_TOKEN bearer credential. Both published ports bind only to loopback. The RoomTrace geometry service stays inside the Compose network.
+Open http://localhost:8789. Spaces is in the left navigation. The MCP capability endpoint is http://localhost:8788/mcp and requires the generated HOMEKEEPER_TOKEN bearer credential. Both published ports bind only to loopback. The RoomTrace geometry service stays inside the Compose network.
 
 If your .env already exists, setup preserves its values and adds missing settings. It never prints a key. Never paste a secret into browser code or a conversation. After changing .env:
 
@@ -25,13 +25,13 @@ Home records and forms work without a model. The conversation shows missing conf
 
 ## Use HomeKeeper
 
-### RoomTrace
+### Spaces
 
-Open **RoomTrace** in the left rail to create or open a 3D space. Its complete modeling workspace lives under `features/roomtrace/`, including photo/video intake, structured architectural modeling through Codex MCP, the explicit MapAnything alternative, texture authoring, photo alignment, measurements in metres, and model walkthroughs. It uses the same typography and colors, with one HomeKeeper navigation rail. Returning to Conversation preserves your draft. Leaving RoomTrace stops its camera by closing the workspace; reopening restores the selected space.
+Open **Spaces** in the left rail to create or open a 3D space. Its native React workspace lives under `web/spaces/`, including photo/video intake, structured architectural modeling through Codex MCP, the explicit MapAnything alternative, texture authoring, photo alignment, measurements in metres, and model walkthroughs. It uses the same typography and colors, with one HomeKeeper navigation rail. Returning to Conversation preserves your draft. Leaving Spaces stops its camera by unmounting the workspace; reopening restores the selected space.
 
-The host streams `/roomtrace/` requests to the Python service, including uploads, images and GLB downloads. Household records and geometry have separate stores. Structured generation still runs through Codex using the supplied modeling request; HomeKeeper's Nebius conversation is not silently given modeling tools. There are no hosted generation APIs or Pascal connections. Estimated geometry and step counts do not establish physical accuracy or a verified walking route.
+There is one React application and one frontend build. Spaces loads on demand in HomeKeeper’s own React tree. The host streams `/roomtrace/api/` requests to the Python service, including uploads, images and GLB downloads. Household records and geometry have separate stores. Structured generation still runs through Codex using the supplied modeling request; HomeKeeper's Nebius conversation is not silently given modeling tools. There are no hosted generation APIs or Pascal connections. Estimated geometry and step counts do not establish physical accuracy or a verified walking route.
 
-For native local execution, install the Python requirements and build both web applications:
+For native local execution, install the Python requirements and build HomeKeeper:
 
 ```sh
 python3 -m venv .venv
@@ -87,10 +87,10 @@ React browser
       -> forms/uploads -> capability/server.js
       -> agent.js -> Nebius -> MCP client -> capability/server.js
                                                 -> tools.js -> store.js -> SQLite
-  -> /roomtrace/ -> features/roomtrace Python API -> local captures and geometry
+  -> Spaces (web/spaces) -> /roomtrace/api/ -> Python API -> captures and geometry
 ```
 
-`capability/` is the requested Alexa-style capability container folder. `alexa_host/` is the local conversation host. `features/roomtrace/` owns the geometry service, its web workspace and its tests. `web/roomtrace/` contains only the HomeKeeper menu surface. The host retains conversation transcripts in its own volume; only the capability service owns household records. All tool definitions and direct form writes use the same validation and commands. No ORM, vector database, agent framework or graph database is needed for this scope.
+`capability/` is the requested Alexa-style capability container folder. `alexa_host/` is the local conversation host. `features/roomtrace/` owns the geometry service and its tests. `web/spaces/` owns the native modeling page and scoped styles. The host retains conversation transcripts in its own volume; only the capability service owns household records. All tool definitions and direct form writes use the same validation and commands. No ORM, vector database, agent framework or graph database is needed for this scope.
 
 The research and implementation decisions are in RESEARCH_AND_PLAN.md. Product constraints are in PRODUCT.md. The interface is documented in DESIGN.md.
 
@@ -116,7 +116,7 @@ The services use non-root containers, read-only filesystems, dropped capabilitie
 
 ## Verification
 
-The HomeKeeper and RoomTrace integration has passed the system suites, real Python geometry/API checks, browser navigation and form checks, actual capture uploads, saved-model rendering and MCP calls through the host gateway. Desktop screenshots were inspected. Both Docker images build, and the RoomTrace image passed API boundary checks on CPU. This verifies the local integration; it does not certify physical measurement accuracy, live Nebius reasoning, CUDA execution or a safe walking route. See VERIFICATION.md for the current results and historical checks.
+Native Spaces has passed the HomeKeeper system and browser suites, the Python API boundary check, camera/capture/walkthrough checks, actual photo uploads, saved-model rendering and MCP calls through the host gateway. Desktop screenshots were inspected, both Docker images built, and the deployed app retained all 11 captures and existing household records. This verifies the local integration; it does not certify physical measurement accuracy, live Nebius reasoning, CUDA execution or a safe walking route. See VERIFICATION.md for the current results and historical checks.
 
 ```sh
 npm test

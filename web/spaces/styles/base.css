@@ -1,62 +1,36 @@
-@font-face {
-  font-family: "Alexa Sans";
-  src: url("../assets/alexa-sans-text-dark-regular.woff2") format("woff2");
-  font-weight: 400;
-  font-display: swap;
-}
-@font-face {
-  font-family: "Alexa Sans";
-  src: url("../assets/alexa-sans-text-dark-medium.woff2") format("woff2");
-  font-weight: 500 800;
-  font-display: swap;
-}
-:root {
-  font-family: "Alexa Sans", system-ui, sans-serif;
+.spaces-workspace {
+  grid-column: 2;
+  min-height: 100dvh;
+  min-width: 0;
+  padding: 88px 24px 16px 112px;
   color: #fff;
-  background: #141d22;
-  color-scheme: dark;
-  font-synthesis: none;
-  font-weight: 400;
-  --muted: #c7c8ca;
-  --line: #ffffff20;
-  --surface: #3e4349;
   --field: #252f36;
-  --accent: #0abeff;
   --model: #172630;
   --panel-width: 380px;
+  --viewer-height: max(420px, calc(100dvh - 330px));
   scrollbar-color: #78858d #252f36;
   caret-color: #8ee5ff;
 }
-::selection {
+:where(.spaces-workspace) ::selection {
   background: #0abeff45;
   color: #fff;
 }
-* {
-  box-sizing: border-box;
-}
-body {
-  margin: 0;
-  min-width: 0;
-}
-[hidden] {
-  display: none !important;
-}
-button,
-input,
-textarea,
-select {
+:where(.spaces-workspace) button,
+:where(.spaces-workspace) input,
+:where(.spaces-workspace) textarea,
+:where(.spaces-workspace) select {
   font: inherit;
 }
-button,
-a,
-input,
-textarea,
-summary,
-select {
+:where(.spaces-workspace) button,
+:where(.spaces-workspace) a,
+:where(.spaces-workspace) input,
+:where(.spaces-workspace) textarea,
+:where(.spaces-workspace) summary,
+:where(.spaces-workspace) select {
   touch-action: manipulation;
 }
-button,
-.upload-inline {
+:where(.spaces-workspace) button,
+:where(.spaces-workspace) .upload-inline {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -74,80 +48,58 @@ button,
     background 150ms ease,
     border-color 150ms ease;
 }
-button svg,
-summary svg {
+:where(.spaces-workspace) button svg,
+:where(.spaces-workspace) summary svg {
   flex-shrink: 0;
 }
-button:hover,
-.upload-inline:hover {
+:where(.spaces-workspace) button:hover,
+:where(.spaces-workspace) .upload-inline:hover {
   background: #ffffff0c;
 }
-button:disabled,
-.disabled {
+:where(.spaces-workspace) button:disabled,
+:where(.spaces-workspace) .disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
-button[aria-pressed="true"] {
+:where(.spaces-workspace) button[aria-pressed="true"] {
   background: #0abeff1c;
   border-color: #0abeff85;
   color: #a3e8ff;
 }
-button.primary {
+:where(.spaces-workspace) button.primary {
   background: var(--accent);
   border-color: var(--accent);
   color: #062432;
 }
-button.primary:hover:not(:disabled) {
+:where(.spaces-workspace) button.primary:hover:not(:disabled) {
   background: #61d5ff;
 }
-button.danger {
+:where(.spaces-workspace) button.danger {
   color: #ffb2ad;
   border-color: #ffb2ad66;
 }
-a {
+:where(.spaces-workspace) a {
   color: #8fe1ff;
   text-underline-offset: 4px;
 }
-a:hover {
+:where(.spaces-workspace) a:hover {
   color: #d0f3ff;
 }
-:where(button, a, input, textarea, select, summary):focus-visible {
+:where(.spaces-workspace)
+  :where(button, a, input, textarea, select, summary):focus-visible {
   outline: 2px solid #8ee5ff;
   outline-offset: 3px;
 }
-main:focus {
+:where(.spaces-workspace) main:focus {
   outline: none;
 }
-.sr-only {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
-  border: 0;
-}
-.skip-link {
-  position: fixed;
-  left: 16px;
-  top: -80px;
-  z-index: 100;
-  padding: 12px 18px;
-  background: var(--surface);
-  border-radius: 12px;
-}
-.skip-link:focus {
-  top: 12px;
-}
-h1,
-h2,
-h3,
-p {
+:where(.spaces-workspace) h1,
+:where(.spaces-workspace) h2,
+:where(.spaces-workspace) h3,
+:where(.spaces-workspace) p {
   margin-top: 0;
 }
-h1 {
+:where(.spaces-workspace) h1 {
   font-size: 30px;
   font-weight: 400;
   letter-spacing: -0.5px;
@@ -155,59 +107,60 @@ h1 {
   margin-bottom: 8px;
   overflow-wrap: anywhere;
 }
-h2 {
+:where(.spaces-workspace) h2 {
   font-size: 21px;
   font-weight: 500;
   margin-bottom: 12px;
 }
-h3 {
+:where(.spaces-workspace) h3 {
   font-size: 16px;
   font-weight: 500;
   margin-bottom: 8px;
 }
-p {
+:where(.spaces-workspace) p {
   font-size: 14px;
   line-height: 1.5;
   margin-bottom: 14px;
 }
-strong {
+:where(.spaces-workspace) strong {
   font-weight: 500;
 }
-.hint,
-.muted,
-.empty-note {
+:where(.spaces-workspace) .hint,
+:where(.spaces-workspace) .muted,
+:where(.spaces-workspace) .empty-note {
   color: var(--muted);
 }
-.hint {
+:where(.spaces-workspace) .hint {
   font-size: 12px;
   line-height: 1.5;
   margin: 8px 0 12px;
   overflow-wrap: anywhere;
 }
-.error {
+:where(.spaces-workspace) .error {
   color: #ffb2ad;
   font-size: 13px;
   line-height: 1.5;
   overflow-wrap: anywhere;
 }
-.error:empty {
+:where(.spaces-workspace) .error:empty {
   display: none;
 }
-label {
+:where(.spaces-workspace) label {
   display: block;
   font-size: 13px;
   margin: 14px 0 8px;
 }
-label .muted {
+:where(.spaces-workspace) label .muted {
   font-size: 12px;
   font-weight: 400;
   margin-left: 5px;
 }
-input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not(
+:where(.spaces-workspace)
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not(
     .sr-only
   ),
-textarea,
-select {
+:where(.spaces-workspace) textarea,
+:where(.spaces-workspace) select {
   width: 100%;
   min-width: 0;
   min-height: 40px;
@@ -218,85 +171,85 @@ select {
   background: var(--field);
   font-size: 14px;
 }
-label > input:not(.sr-only),
-label > textarea,
-label > select {
+:where(.spaces-workspace) label > input:not(.sr-only),
+:where(.spaces-workspace) label > textarea,
+:where(.spaces-workspace) label > select {
   margin-top: 7px;
 }
-input::placeholder,
-textarea::placeholder {
+:where(.spaces-workspace) input::placeholder,
+:where(.spaces-workspace) textarea::placeholder {
   color: #bac1c6;
   opacity: 1;
 }
-textarea {
+:where(.spaces-workspace) textarea {
   resize: vertical;
   line-height: 1.5;
 }
-input[type="checkbox"],
-input[type="radio"] {
+:where(.spaces-workspace) input[type="checkbox"],
+:where(.spaces-workspace) input[type="radio"] {
   accent-color: var(--accent);
   width: 16px;
   height: 16px;
   flex-shrink: 0;
 }
-input[type="range"] {
+:where(.spaces-workspace) input[type="range"] {
   width: 100%;
   accent-color: var(--accent);
 }
-fieldset {
+:where(.spaces-workspace) fieldset {
   border: 0;
   padding: 0;
   margin: 0;
   min-width: 0;
 }
-legend {
+:where(.spaces-workspace) legend {
   font-size: 13px;
 }
-details {
+:where(.spaces-workspace) details {
   border-top: 1px solid var(--line);
   margin-top: 16px;
   padding-top: 10px;
   font-size: 13px;
 }
-summary {
+:where(.spaces-workspace) summary {
   min-height: 34px;
   padding: 7px 0;
   cursor: pointer;
   line-height: 1.5;
 }
-summary::marker {
+:where(.spaces-workspace) summary::marker {
   color: var(--muted);
 }
-summary svg {
+:where(.spaces-workspace) summary svg {
   vertical-align: -3px;
   margin-right: 5px;
 }
-details[open] > summary {
+:where(.spaces-workspace) details[open] > summary {
   margin-bottom: 6px;
 }
-figure {
+:where(.spaces-workspace) figure {
   margin: 0;
 }
-figcaption {
+:where(.spaces-workspace) figcaption {
   font-size: 11px;
   line-height: 1.4;
   color: var(--muted);
 }
-ul,
-ol {
+:where(.spaces-workspace) ul,
+:where(.spaces-workspace) ol {
   padding-left: 22px;
 }
-li {
+:where(.spaces-workspace) li {
   line-height: 1.5;
 }
-pre {
+:where(.spaces-workspace) pre {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   font-size: 12px;
   max-height: 260px;
   overflow: auto;
 }
-.icon-button {
+:where(.spaces-workspace) .icon-button {
   padding: 8px;
   width: 36px;
   min-height: 36px;
@@ -305,7 +258,7 @@ pre {
   border-radius: 50%;
   flex-shrink: 0;
 }
-.text-button {
+:where(.spaces-workspace) .text-button {
   color: #a3e8ff;
   border: 0;
   padding: 6px 0;
@@ -313,12 +266,12 @@ pre {
   text-align: left;
   justify-content: flex-start;
 }
-.section-row {
+:where(.spaces-workspace) .section-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
 }
-.section-row h3 {
+:where(.spaces-workspace) .section-row h3 {
   margin-bottom: 0;
 }

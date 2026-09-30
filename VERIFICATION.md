@@ -1,4 +1,23 @@
-# Current integration: RoomTrace in HomeKeeper
+# Current integration: native Spaces
+
+Verified 2026-09-30. The single HomeKeeper frontend lazy-loads `web/spaces/`, owns its React tree, and calls the existing geometry API. The iframe, separate frontend build, duplicate fonts and geometry-service web hosting were removed. User-facing navigation is Spaces; backend routes, environment settings and MCP identifiers retain their existing names.
+
+| Check | Observed result |
+| --- | --- |
+| Existing HomeKeeper | `npm test` and `npm run check:browser` passed household persistence, permissions, gateway transport, forms, uploads, pagination and search. |
+| Native Spaces | `npm run check:roomtrace` passed with zero iframes, shared styles isolated from Conversation, full desktop width, a model contained within the desktop viewport, no horizontal overflow at 1440 px and 1024 px, draft retention and saved-space restoration. A deliberately stopped geometry service produced a recoverable error while Conversation remained usable. No uncaught browser errors. |
+| Modeling and MCP | Four actual photographs were uploaded through the host gateway. A fresh MCP process inspected reference photos and saved asset evidence, replayed the existing agent-authored document, exported actual geometry, rejected a stale revision and returned a real photo-overlay PNG. The resulting GLB rendered and downloaded through native Spaces. This replay does not establish new inference quality. |
+| Geometry and camera boundaries | The Python API boundary check and JavaScript capture, walkthrough and camera checks passed. The camera check verifies stream teardown on unmount with explicit hardware doubles; physical camera hardware was not exercised. |
+| Build and deployment | One Vite frontend and both Docker images built. The updated host and geometry services run at http://127.0.0.1:8789/?view=spaces. The household service stayed running and both existing household/chat volumes were retained. The deployed household response and all 11 capture records matched the pre-deployment snapshot; private geometry files were copied byte-for-byte from the stopped service, with originals retained. |
+| Interface and secrets | Desktop capture, model and outage screenshots were inspected in `.impeccable/review/`, including `homekeeper-spaces-deployed.jpg` from the actual in-app browser. The Impeccable detector returned no findings. Configured keys and tokens were absent from the frontend build. |
+
+The 3D page is loaded on demand; its JavaScript chunk is 1.11 MB before compression, 303 KB gzip. Fonts are served once from shared HomeKeeper assets. The root CSP permits WebAssembly mesh decoding and same-origin blob assets, prohibits frames, and retains the existing host/origin/authentication boundaries.
+
+No live Nebius reasoning, new MapAnything inference, CUDA execution, physical positioning or walking safety was tested in this revision. Dimensions and steps remain estimates without genuine physical measurement evidence.
+
+---
+
+# Previous integration: embedded RoomTrace in HomeKeeper
 
 Verified 2026-09-30. RoomTrace is a self-contained feature in `features/roomtrace/`, reached through HomeKeeper's navigation and same-origin streaming gateway. Its modeling agent remains the real Codex MCP workflow. No hosted generation API or Pascal runtime is connected.
 

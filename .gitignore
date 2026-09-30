@@ -141,3 +141,13 @@ dist
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
+
+# RoomTrace local captures, caches and Python environments
+features/roomtrace/data/
+features/roomtrace/models/
+.venv/
+__pycache__/
+*.py[cod]
+.ruff_cache/
+.impeccable/
+data/

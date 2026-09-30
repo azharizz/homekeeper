@@ -1,0 +1,456 @@
+.model-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+  gap: 16px;
+}
+.model-layout.has-panel {
+  grid-template-columns: minmax(0, 1fr) var(--panel-width);
+}
+.spatial-column {
+  min-width: 0;
+  position: relative;
+}
+.map-view {
+  position: relative;
+  min-height: 490px;
+  height: calc(100dvh - 260px);
+  overflow: hidden;
+  border-radius: 20px;
+  background: var(--model);
+  isolation: isolate;
+}
+.map-view canvas {
+  touch-action: none;
+}
+.viewer-toolbar {
+  position: absolute;
+  z-index: 2;
+  top: 14px;
+  left: 14px;
+  right: 14px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+  pointer-events: none;
+}
+.viewer-toolbar > * {
+  pointer-events: auto;
+}
+.viewer-toolbar select,
+.viewer-toolbar button {
+  background: #283943ed;
+  width: auto;
+  max-width: 145px;
+  min-height: 34px;
+  font-size: 12px;
+  padding: 6px 9px;
+  border-radius: 9px;
+}
+.viewer-toolbar > span {
+  font-size: 11px;
+  color: var(--muted);
+  padding: 8px;
+}
+.viewer-toolbar label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  margin: 0;
+  padding: 6px 9px;
+  background: #283943ed;
+  border-radius: 9px;
+  min-height: 34px;
+}
+.viewer-toolbar label input {
+  margin: 0;
+}
+.viewer-caption {
+  position: absolute;
+  left: 16px;
+  right: 16px;
+  bottom: 12px;
+  z-index: 2;
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 11px;
+  pointer-events: none;
+}
+.viewer-error {
+  padding: 85px 24px;
+  font-size: 14px;
+}
+.reference-preview {
+  position: absolute;
+  right: 16px;
+  bottom: 48px;
+  width: 136px;
+  border-radius: 9px;
+  overflow: hidden;
+  font-size: 11px;
+  background: var(--field);
+  text-decoration: none;
+}
+.reference-preview img {
+  width: 100%;
+  display: block;
+}
+.reference-preview span {
+  display: block;
+  padding: 6px;
+}
+.plan-overview {
+  position: absolute;
+  left: 16px;
+  bottom: 45px;
+  z-index: 3;
+  width: 184px;
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #24313bef;
+}
+.plan-overview summary {
+  min-height: 28px;
+  padding: 2px 0;
+  font-size: 12px;
+}
+.plan-overview select {
+  min-height: 30px;
+  font-size: 11px;
+  padding: 3px 6px;
+  margin-bottom: 7px;
+}
+.projection svg {
+  display: block;
+  width: 100%;
+  max-height: 160px;
+  background: #eef0eb;
+  border-radius: 6px;
+}
+.projection figcaption {
+  margin-top: 7px;
+  font-size: 10px;
+}
+.projection figcaption span {
+  font-size: inherit;
+}
+.inspector {
+  min-width: 0;
+  min-height: 490px;
+  height: calc(100dvh - 260px);
+  overflow-y: auto;
+  padding: 20px;
+  background: var(--surface);
+  border-radius: 20px;
+  animation: reveal 180ms ease-out;
+  scrollbar-gutter: stable;
+}
+.inspector .panel-heading {
+  position: sticky;
+  top: -20px;
+  background: var(--surface);
+  z-index: 4;
+  padding-block: 10px;
+  margin-top: -10px;
+}
+.inspector > :last-child {
+  margin-bottom: 0;
+}
+.photo-navigation {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.photo-navigation select {
+  min-width: 0;
+  flex: 1;
+}
+.alignment-toggle {
+  margin: 8px 0;
+}
+.architecture-source img {
+  display: block;
+  width: 100%;
+  height: auto;
+  background: var(--model);
+  object-fit: contain;
+  border-radius: 9px;
+}
+.object-inspector {
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 12px;
+  padding-bottom: 14px;
+}
+.object-inspector p {
+  font-size: 13px;
+}
+.object-list,
+.issue-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.object-list li {
+  border-bottom: 1px solid var(--line);
+}
+.object-list button {
+  width: 100%;
+  justify-content: space-between;
+  text-align: left;
+  border: 0;
+  border-radius: 7px;
+  padding: 12px 7px;
+  font-size: 13px;
+}
+.object-list button > span {
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+.object-list small {
+  color: var(--muted);
+  font-size: 11px;
+  display: block;
+  margin-top: 4px;
+}
+.issue-list li {
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+}
+.issue-list p {
+  font-size: 12px;
+  margin-bottom: 6px;
+}
+.issue-list small {
+  color: var(--muted);
+}
+.source-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.source-links button {
+  min-height: 30px;
+  font-size: 11px;
+  padding: 5px 8px;
+}
+.copy-action {
+  margin: 16px 0;
+}
+.copy-action > button {
+  width: 100%;
+  font-size: 13px;
+}
+.placement-fields,
+.split {
+  display: flex;
+  gap: 9px;
+}
+.placement-fields > *,
+.split > * {
+  min-width: 0;
+  flex: 1;
+}
+.placement-fields input {
+  padding-inline: 8px;
+}
+dl {
+  margin: 12px 0;
+  font-size: 12px;
+}
+dl > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--line);
+}
+dt {
+  color: var(--muted);
+}
+dd {
+  margin: 0;
+  text-align: right;
+  max-width: 65%;
+  overflow-wrap: anywhere;
+}
+.alignment-picture {
+  position: relative;
+  width: 100%;
+  background: var(--model);
+}
+.alignment-picture > div {
+  position: absolute !important;
+  inset: 0;
+}
+.alignment-photo-button {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+.alignment-photo-button:hover {
+  background: transparent;
+}
+.alignment-photo-button:disabled {
+  opacity: 1;
+  cursor: default;
+}
+.alignment-picture img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  max-height: none;
+  object-fit: fill;
+  border-radius: 0;
+}
+.alignment-markers {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  overflow: hidden;
+}
+.alignment-landmark {
+  margin: 14px 0;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+.alignment-landmark > label:first-of-type {
+  margin-top: 0;
+}
+.alignment-actions {
+  display: flex;
+  gap: 8px;
+  margin: 14px 0;
+}
+.alignment-actions button {
+  flex: 1;
+  font-size: 12px;
+  padding-inline: 8px;
+}
+.residual-list {
+  padding-left: 18px;
+  font-size: 12px;
+}
+.residual-list li {
+  margin-bottom: 6px;
+}
+.observation .camera button,
+.upload-inline {
+  width: 100%;
+}
+.camera video {
+  width: 100%;
+  max-height: 250px;
+  object-fit: contain;
+  background: var(--model);
+  border-radius: 10px;
+  margin-bottom: 10px;
+}
+.upload-inline:has(input:focus-visible) {
+  outline: 2px solid #8ee5ff;
+  outline-offset: 3px;
+}
+.observation-result {
+  margin-top: 18px;
+  padding-top: 15px;
+  border-top: 1px solid var(--line);
+}
+.observation-result strong {
+  font-size: 15px;
+}
+.observation-result img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 9px;
+}
+.job-state {
+  max-width: 530px;
+  margin: 65px auto;
+}
+.job-state > svg {
+  color: var(--accent);
+  margin-bottom: 20px;
+}
+.job-state progress {
+  width: 100%;
+  height: 6px;
+  accent-color: var(--accent);
+}
+.modeling-request {
+  margin: 24px 0;
+  padding: 24px;
+  background: var(--surface);
+  border-radius: 20px;
+}
+.modeling-request p {
+  font-size: 14px;
+}
+.modeling-request .hint {
+  font-size: 12px;
+  margin-bottom: 0;
+}
+@keyframes reveal {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@media (max-width: 1150px) {
+  :root {
+    --panel-width: 330px;
+  }
+  main {
+    padding-right: 20px;
+  }
+  .viewer-toolbar {
+    gap: 5px;
+    left: 10px;
+    right: 10px;
+  }
+  .viewer-toolbar select {
+    max-width: 120px;
+  }
+  .inspector {
+    padding: 16px;
+  }
+  .inspector .panel-heading {
+    top: -16px;
+  }
+  .plan-overview {
+    width: 158px;
+  }
+  .projection svg {
+    max-height: 128px;
+  }
+  .viewer-caption {
+    font-size: 10px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation: none !important;
+    transition: none !important;
+  }
+}

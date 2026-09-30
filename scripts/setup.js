@@ -1,4 +1,10 @@
-import { readFileSync, writeFileSync, existsSync, chmodSync } from "node:fs";
+import {
+  readFileSync,
+  writeFileSync,
+  existsSync,
+  chmodSync,
+  mkdirSync,
+} from "node:fs";
 import { randomBytes } from "node:crypto";
 import { parseEnv } from "node:util";
 
@@ -13,6 +19,10 @@ const defaults = {
   HOMEKEEPER_TOKEN: randomBytes(32).toString("hex"),
   MCP_REQUEST_TIMEOUT_MS: "900000",
   MAX_AGENT_ROUNDS: "12",
+  ROOMTRACE_PORT: "8790",
+  ROOMTRACE_PYTHON: "python3",
+  ROOMTRACE_UID: String(process.getuid?.() || 10001),
+  ROOMTRACE_GID: String(process.getgid?.() || 10001),
 };
 const emptyToken = "HOMEKEEPER_TOKEN" in values && !values.HOMEKEEPER_TOKEN;
 if (emptyToken) {
@@ -31,6 +41,12 @@ if (additions.length || emptyToken)
     { mode: 0o600 },
   );
 chmodSync(path, 0o600);
+mkdirSync(new URL("../features/roomtrace/data", import.meta.url), {
+  recursive: true,
+});
+mkdirSync(new URL("../features/roomtrace/models", import.meta.url), {
+  recursive: true,
+});
 console.log("Local configuration prepared. Existing values were preserved.");
 console.log(
   ["NEBIUS_MODEL", "NEBIUS_API_KEY", "NEBIUS_BASE_URL"].every(

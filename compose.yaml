@@ -25,10 +25,31 @@ services:
       MCP_REQUEST_TIMEOUT_MS: ${MCP_REQUEST_TIMEOUT_MS:-900000}
       MAX_AGENT_ROUNDS: ${MAX_AGENT_ROUNDS:-12}
       CAPABILITY_URL: http://capability:8788
+      ROOMTRACE_URL: http://roomtrace:8000
       CHAT_DB_PATH: /data/conversations.sqlite
     ports: ["127.0.0.1:${LOCAL_HOST_PORT:-8789}:${LOCAL_HOST_PORT:-8789}"]
     volumes: ["chat-data:/data"]
-    depends_on: ["capability"]
+    depends_on: ["capability", "roomtrace"]
+    restart: unless-stopped
+    init: true
+    read_only: true
+    tmpfs: ["/tmp"]
+    cap_drop: ["ALL"]
+    security_opt: ["no-new-privileges:true"]
+  roomtrace:
+    platform: linux/amd64
+    build: ./features/roomtrace
+    user: "${ROOMTRACE_UID:-10001}:${ROOMTRACE_GID:-10001}"
+    environment:
+      HOMEKEEPER_TOKEN: ${HOMEKEEPER_TOKEN:?Run npm run setup first}
+      APP_ALLOWED_HOSTS: localhost,127.0.0.1,roomtrace
+      ROOMTRACE_DATA: /app/features/roomtrace/data
+      COMPUTE_DEVICE: cpu
+      DEPTH_DEVICE: cpu
+      MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-512}
+    volumes:
+      - ./features/roomtrace/data:/app/features/roomtrace/data
+      - ./features/roomtrace/models:/app/features/roomtrace/models
     restart: unless-stopped
     init: true
     read_only: true

@@ -1,11 +1,11 @@
 FROM node:24-bookworm-slim AS build
 WORKDIR /app
 COPY package*.json ./
-RUN npm ci --no-audit --no-fund
+RUN npm ci --workspaces=false --no-audit --no-fund
 COPY index.html vite.config.js ./
 COPY web ./web
-RUN npm run build
-RUN npm prune --omit=dev
+RUN npx vite build
+RUN npm prune --workspaces=false --omit=dev
 
 FROM node:24-bookworm-slim
 ENV NODE_ENV=production

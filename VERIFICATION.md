@@ -13,6 +13,8 @@ Verified 2026-09-30. The single HomeKeeper frontend lazy-loads `web/spaces/`, ow
 
 The 3D page is loaded on demand; its JavaScript chunk is 1.11 MB before compression, 303 KB gzip. Fonts are served once from shared HomeKeeper assets. The root CSP permits WebAssembly mesh decoding and same-origin blob assets, prohibits frames, and retains the existing host/origin/authentication boundaries.
 
+Cutaway starts off when opening a model. A check against the deployed browser verified the initial off state, manual activation and the off state after reload. The updated host image built and was deployed without restarting geometry or household storage.
+
 No live Nebius reasoning, new MapAnything inference, CUDA execution, physical positioning or walking safety was tested in this revision. Dimensions and steps remain estimates without genuine physical measurement evidence.
 
 ---

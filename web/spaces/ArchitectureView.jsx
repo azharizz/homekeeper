@@ -28,7 +28,7 @@ export default function ArchitectureView({ scene, children, observation }) {
     : doc.levels[0].id;
   const [showAllFloors, setAllFloors] = useState(doc.levels.length > 1);
   const allFloors = showAllFloors && doc.levels.length > 1;
-  const [cutaway, setCutaway] = useState(true);
+  const [cutaway, setCutaway] = useState(false);
   const [selected, setSelected] = useState("");
   const [view, setView] = useState("entry");
   const [focus, setFocus] = useState(false);

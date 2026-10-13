@@ -31,6 +31,18 @@ Open **Spaces** in the left rail to create or open a 3D space. Its native React 
 
 There is one React application and one frontend build. Spaces loads on demand in HomeKeeper’s own React tree. The host streams `/roomtrace/api/` requests to the Python service, including uploads, images and GLB downloads. Household records and geometry have separate stores. Structured generation still runs through Codex using the supplied modeling request; HomeKeeper's Nebius conversation is not silently given modeling tools. There are no hosted generation APIs or Pascal connections. Estimated geometry and step counts do not establish physical accuracy or a verified walking route.
 
+
+### Connecting Spaces to household records
+
+Use a human-confirmed link when a modeled object represents an item in **Your home**. Select the object in Spaces, then explicitly choose the existing household item it represents. A matching name, appearance or model label is not enough to identify the item automatically.
+
+- **Open an item passport:** select the linked object and open its HomeKeeper passport to see the saved item records.
+- **Create care work:** from that linked object, create a task or schedule maintenance for the linked item. The work retains the selected space/object anchor. Supply the actual due date and maintenance details yourself; saved dates do not send notifications.
+- **View source photos:** use the object's existing evidence/photo controls to open the real RoomTrace capture photos supporting that object. These are source images, not a new image generation or live camera view.
+- **Remember where an item is stored:** select the model object representing its container or location, explicitly choose the household item being stored, and enter the location detail, such as “top shelf, left drawer.” The stored item and its container are different roles; do not link the container's passport to the stored item just to save a location. The saved location belongs to the stored item and retains the selected space/object anchor. Recall it through HomeKeeper memory or the item passport, then use **View in 3D** to reopen that object in Spaces. Editing the location text keeps its spatial anchor.
+
+Links and location anchors live in the household database; RoomTrace keeps its separate geometry store. If a model revision changes, confirm an item link against the current object before adding new pinned care records. A saved anchor refers to a model object, not live tracking: HomeKeeper cannot detect that an item moved, locate it from a new camera view, or verify its shelf/drawer. Location text comes from the household. Model geometry, dimensions and walkthroughs remain estimates, not sensor-verified measurements, physical localization or verified walking routes. These features retain the single-household, local-only deployment limits described below.
+
 For native local execution, install the Python requirements and build HomeKeeper:
 
 ```sh

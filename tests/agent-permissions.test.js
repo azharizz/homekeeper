@@ -80,8 +80,20 @@ test("direct saves, read-only reviews and destructive decisions enforce authorit
       message: "Remember the test keys",
       execution: "direct",
     });
-    assert.equal(direct.state, "ready");
+    assert.equal(direct.state, "ready", direct.error);
     assert.equal(capability.store.home().memories.length, 1);
+    const offeredTools = requests[0].tools.map((entry) => entry.function);
+    assert.ok(!offeredTools.some((entry) =>
+      ["link_space_object", "save_spatial_location", "save_spatial_task",
+        "schedule_spatial_maintenance"].includes(entry.name)));
+    const memoryProperties = offeredTools.find((entry) => entry.name === "save_memory").parameters.properties;
+    for (const field of ["space_id", "element_id", "space_revision", "space_name", "element_label"])
+      assert.ok(!(field in memoryProperties));
+    for (const name of ["save_task", "schedule_maintenance", "update_maintenance"]) {
+      const properties = offeredTools.find((entry) => entry.name === name).parameters.properties;
+      for (const field of ["space_id", "element_id", "space_revision"])
+        assert.ok(!(field in properties));
+    }
 
     replies.push(call("save_memory", { ...memory, title: "Needs review" }));
     const reviewed = await agent.run(agent.create().id, {
@@ -210,6 +222,56 @@ test("direct saves, read-only reviews and destructive decisions enforce authorit
       1,
       "An unsolicited write in a read-only run is never executed",
     );
+    const beforeInventedAnchor = JSON.stringify(capability.store.home());
+    replies.push(call("save_spatial_location", {
+      ...memory, asset_id: item.id, space_id: "a".repeat(32), element_id: "cabinet",
+      space_revision: 1, space_name: "Invented", element_label: "Invented",
+    }));
+    const inventedAnchor = await agent.run(agent.create().id, {
+      message: "Tell me where the keys are",
+      execution: "direct",
+    });
+    assert.equal(inventedAnchor.state, "error");
+    assert.equal(JSON.stringify(capability.store.home()), beforeInventedAnchor);
+    const forgedPin = {
+      asset_id: item.id,
+      space_id: "a".repeat(32),
+      element_id: "cabinet",
+      space_revision: 1,
+    };
+    const taskPin = { ...forgedPin, title: "Invented pin", kind: "task" };
+    const maintenancePin = {
+      ...forgedPin, title: "Invented plan", due_on: plan.due_on, source: plan.source,
+    };
+    for (const [name, input] of [
+      ["save_spatial_task", taskPin],
+      ["schedule_spatial_maintenance", maintenancePin],
+      ["save_task", taskPin],
+      ["schedule_maintenance", maintenancePin],
+      ["update_maintenance", {
+        ...maintenancePin,
+        maintenance_id: plan.id,
+        expected_due_on: plan.due_on,
+        expected_revision: plan.revision,
+        interval_days: null,
+      }],
+    ]) {
+      replies.push(call(name, input));
+      const forged = await agent.run(agent.create().id, {
+        message: "Tell me about test care",
+        execution: "direct",
+      });
+      if (["save_task", "schedule_maintenance", "update_maintenance"].includes(name)) {
+        const rejection = forged.messages.findLast(
+          (message) => message.role === "tool" && message.name === name,
+        );
+        assert.ok(rejection, `Expected ${name} to return a validation error`);
+        assert.equal(JSON.parse(rejection.content).isError, true);
+      } else {
+        assert.equal(forged.state, "error", `Agent cannot invoke ${name}`);
+      }
+      assert.equal(JSON.stringify(capability.store.home()), beforeInventedAnchor);
+    }
   } finally {
     agent.close();
     await Promise.all([

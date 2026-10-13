@@ -24,7 +24,13 @@ One trusted local household. Persistent items, facts, locations, contacts, prefe
 
 Device control, web search, purchases, external bookings and delivered notifications need real integrations and are not connected. This is a local host, not an Amazon Alexa+ deployment. Public deployment needs household identity, authorization, HTTPS and real platform onboarding.
 
-Spaces is a native HomeKeeper React page for 4 to 12 room photographs or video frames. It preserves structured architectural modeling, photo textures, alignment, metre measurements, assets and virtual walkthroughs; MapAnything is a separate alternative. The host serves it on the same origin while household records and geometry retain separate stores. Structured authoring runs in the user's Codex conversation through real MCP tools. Spaces does not infer a physically verified walking route from appearance alone.
+Spaces is a native HomeKeeper React page for 4 to 12 room photographs or video frames. It preserves structured architectural modeling, photo textures, alignment, metre measurements, assets and virtual walkthroughs; MapAnything is a separate alternative. The host serves it on the same origin while household records and geometry retain separate stores. Structured authoring runs in the user's Codex conversation through real MCP tools.
+
+The household explicitly links a selected model object to an existing HomeKeeper item before opening its passport or creating item-linked tasks and maintenance pinned to that object. Names and appearance do not confirm identity. After a model revision changes, the household must confirm the link against the current object before adding new pinned care records. Dates and maintenance details come from the user. The object's existing evidence controls open its real source capture photos.
+
+For storage, the selected model object represents the container or location, while the explicitly chosen household item is the thing stored there. Save the user's detail, such as shelf or drawer, with that item's location memory and model-object anchor. The location can be recalled through household memory or the item passport and reopened in Spaces as a focused 3D view; text edits preserve the anchor. This does not require pretending the stored item and its container are the same linked item.
+
+Geometry and dimensions are estimates. A model anchor does not provide physical localization, live item tracking, detection of moved belongings or a physically verified walking route. Source photos do not verify the current location of an item. All four integrations remain within the trusted, single-household local deployment, not a public or Alexa+ service.
 
 ## Brand Commitments
 HomeKeeper. Calm, short language. No em dashes. One conversation first, records on demand.

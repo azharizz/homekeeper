@@ -14,28 +14,41 @@ import { Icon } from "./ui";
 import DetailsPanel from "./architecture/DetailsPanel";
 import FloorPlan from "./architecture/FloorPlan";
 import ObjectPanel from "./architecture/ObjectPanel";
+import { targetFloor } from "./architecture/target-floor";
 import {
   ArchitectureMesh,
   FittedCamera,
   revisionURL,
 } from "./architecture/Scene";
 
-export default function ArchitectureView({ scene, children, observation }) {
+export default function ArchitectureView({
+  scene,
+  children,
+  observation,
+  home,
+  onHomeChanged,
+  onHomeItem,
+  onHomeAction,
+  targetElementId,
+}) {
   const doc = scene.architecture;
-  const [requestedLevel, setLevel] = useState(doc.levels[0].id);
+  const [initialFloors] = useState(() => targetFloor(doc, targetElementId));
+  const [requestedLevel, setLevel] = useState(initialFloors.level);
   const level = doc.levels.some((item) => item.id === requestedLevel)
     ? requestedLevel
     : doc.levels[0].id;
-  const [showAllFloors, setAllFloors] = useState(doc.levels.length > 1);
+  const [showAllFloors, setAllFloors] = useState(initialFloors.allFloors);
   const allFloors = showAllFloors && doc.levels.length > 1;
   const [cutaway, setCutaway] = useState(false);
-  const [selected, setSelected] = useState("");
+  const [selected, setSelected] = useState(targetElementId || "");
   const [view, setView] = useState("entry");
-  const [focus, setFocus] = useState(false);
+  const [focus, setFocus] = useState(() =>
+    doc.elements.some((item) => item.id === targetElementId),
+  );
   const [photo, setPhoto] = useState(scene.frames[0].name);
   const [picked, setPicked] = useState(null);
   const [measurePoints, setMeasurePoints] = useState([]);
-  const [tool, setTool] = useState("");
+  const [tool, setTool] = useState(targetElementId ? "objects" : "");
   const [walk, setWalk] = useState({
     route: null,
     target: "",
@@ -176,12 +189,7 @@ export default function ArchitectureView({ scene, children, observation }) {
       return;
     }
     if (tool !== "photos" && tool !== "measure") setTool("objects");
-    const clicked = doc.elements.find((item) => item.id === id);
-    setSelected(
-      objects.find((item) =>
-        clicked.assembly ? item.assembly === clicked.assembly : item.id === id,
-      ).id,
-    );
+    setSelected(id);
   };
   const group = element
     ? doc.elements.filter(
@@ -579,12 +587,17 @@ export default function ArchitectureView({ scene, children, observation }) {
             />
             {tool === "objects" && (
               <ObjectPanel
+                key={selected}
                 scene={scene}
                 objects={objects}
                 selected={selected}
                 element={element}
                 group={group}
                 focusBounds={focusBounds}
+                home={home}
+                onHomeItem={onHomeItem}
+                onHomeAction={onHomeAction}
+                targetElementId={targetElementId}
                 onClear={() => { setSelected(""); setFocus(false); }}
                 onSelect={(id) => { select(id); setFocus(false); }}
                 onShowPhoto={(name) => { setPhoto(name); setTool("photos"); }}

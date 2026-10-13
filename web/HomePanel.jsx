@@ -13,6 +13,7 @@ import {
   today,
   uploadDocument,
 } from "./components.jsx";
+import HomeSpatialCard from "./HomeSpatialCard.jsx";
 
 export function HomePanel({
   view,
@@ -24,6 +25,7 @@ export function HomePanel({
   onItem,
   onBack,
   onAsk,
+  onShowSpace,
 }) {
   const [search, setSearch] = useState(""),
     [filter, setFilter] = useState("open"),
@@ -35,11 +37,20 @@ export function HomePanel({
   const asset = home.assets.find((a) => a.id === itemId),
     currentDate = home.today || today();
   const matches = (value) => value.toLowerCase().includes(search.toLowerCase());
-  const assetName = (id) => home.assets.find((a) => a.id === id)?.name;
+  const assetName = (id) => home.assets.find((item) => item.id === id)?.name || "";
+  const linkedSpaceObjects = (home.space_objects || []).filter(
+    (item) => item.asset_id === asset?.id,
+  );
+  const locationMemories = home.memories.filter(
+    (memory) => memory.asset_id === asset?.id && memory.kind === "location",
+  );
   const forItem = (text, id = itemId) =>
     `${text}\n\nHome item reference: ${id}`;
   async function save(action, args) {
-    await api(`/api/actions/${action}`, {
+    const route = action === "save_memory" && Object.hasOwn(args, "space_id")
+      ? "/api/ui-actions/save_spatial_location"
+      : `/api/actions/${action}`;
+    await api(route, {
       method: "POST",
       body: JSON.stringify(args),
     });
@@ -125,14 +136,16 @@ export function HomePanel({
       }),
     });
   }
-  function editTask(task) {
+  function editTask(task, linkedAssetId = null) {
     setEditor({
       title:
         task?.status === "done" || task?.status === "cancelled"
           ? "Reopen task"
           : task
             ? "Edit task"
-            : "Add a task",
+            : linkedAssetId
+              ? "Add a task for this item"
+              : "Add a task",
       action: "save_task",
       values: task
         ? { ...task, status: "open" }
@@ -178,16 +191,17 @@ export function HomePanel({
         interval_days: v.interval_days ? Number(v.interval_days) : null,
         notes: v.notes,
         status: v.status,
-        asset_id: task?.asset_id || null,
+        asset_id: task?.asset_id || linkedAssetId || null,
         ...(task ? { task_id: task.id, expected_revision: task.revision } : {}),
       }),
     });
   }
-  function editMaintenance(task) {
+  function editMaintenance(task, linkedAssetId = null) {
+    const creating = !task;
     setEditor({
-      title: "Edit care plan",
-      action: "update_maintenance",
-      values: task,
+      title: creating ? "Schedule maintenance for this item" : "Edit care plan",
+      action: creating ? "schedule_maintenance" : "update_maintenance",
+      values: task || { title: "", due_on: "", interval_days: "", source: "" },
       fields: [
         { name: "title", label: "Task", required: true },
         { name: "due_on", label: "Next due", type: "date", required: true },
@@ -204,15 +218,24 @@ export function HomePanel({
           advanced: true,
         },
       ],
-      make: (v) => ({
-        maintenance_id: task.id,
-        expected_due_on: task.due_on,
-        expected_revision: task.revision,
-        title: v.title,
-        due_on: v.due_on,
-        interval_days: v.interval_days ? Number(v.interval_days) : null,
-        source: v.source,
-      }),
+      make: (v) =>
+        creating
+          ? {
+              asset_id: linkedAssetId,
+              title: v.title,
+              due_on: v.due_on,
+              interval_days: v.interval_days ? Number(v.interval_days) : null,
+              source: v.source,
+            }
+          : {
+              maintenance_id: task.id,
+              expected_due_on: task.due_on,
+              expected_revision: task.revision,
+              title: v.title,
+              due_on: v.due_on,
+              interval_days: v.interval_days ? Number(v.interval_days) : null,
+              source: v.source,
+            },
     });
   }
   function editMemory(memory) {
@@ -241,7 +264,8 @@ export function HomePanel({
         content: v.content,
         kind: v.kind,
         source: "Recorded by the household in HomeKeeper",
-        asset_id: memory?.asset_id || null,
+        ...(!memory ? { asset_id: null } : {}),
+        ...(memory?.space_id && v.kind !== "location" ? { space_id: null, element_id: null } : {}),
         ...(memory
           ? { memory_id: memory.id, expected_revision: memory.revision }
           : {}),
@@ -392,6 +416,15 @@ export function HomePanel({
                   </button>
                 )}
                 {task.notes && <p>{task.notes}</p>}
+                {task.space_id && task.element_id && (
+                  <HomeSpatialCard
+                    record={task}
+                    revision={task.space_revision ?? task.linked_revision}
+                    kind="care"
+                    actionLabel={`${task.space_name} · ${task.element_label} — Open in Spaces`}
+                    onShowSpace={onShowSpace}
+                  />
+                )}
               </div>
               <IconButton
                 name="edit"
@@ -629,6 +662,46 @@ export function HomePanel({
                   </dl>
                   {asset.notes && <p>{asset.notes}</p>}
                 </details>
+                {linkedSpaceObjects.length > 0 && (
+                  <section className="passport-section">
+                    <h3>3D model objects</h3>
+                    {linkedSpaceObjects.map((linked) => (
+                      <HomeSpatialCard
+                        key={`${linked.space_id}:${linked.element_id}`}
+                        record={linked}
+                        revision={linked.revision}
+                        actionLabel={`${linked.space_name} · ${linked.element_label} — Open in Spaces`}
+                        onShowSpace={onShowSpace}
+                      />
+                    ))}
+                  </section>
+                )}
+                {locationMemories.length > 0 && (
+                  <section className="passport-section">
+                    <h3>Remembered storage locations</h3>
+                    {locationMemories.map((memory) => (
+                      memory.space_id && memory.element_id ? (
+                        <HomeSpatialCard
+                          key={memory.id}
+                          record={memory}
+                          revision={memory.space_revision ?? memory.linked_revision}
+                          kind="storage"
+                          title={memory.title}
+                          description={memory.content}
+                          storedItem={asset.name}
+                          actionLabel={`${memory.space_name} · ${memory.element_label} — Show in Spaces`}
+                          onShowSpace={onShowSpace}
+                        />
+                      ) : (
+                        <article className="home-location-note" key={memory.id}>
+                          <span className="home-spatial-badge">Storage place</span>
+                          <strong>{memory.title}</strong>
+                          <p>{memory.content}</p>
+                        </article>
+                      )
+                    ))}
+                  </section>
+                )}
                 {home.incidents.some((i) => i.asset_id === asset.id) && (
                   <section className="passport-section">
                     <h3>Open issues</h3>
@@ -799,8 +872,23 @@ export function HomePanel({
                   <div className="record-list">
                     {rows.map((m) => (
                       <article className="memory-row" key={m.id}>
-                        <h3>{m.title}</h3>
-                        <p>{m.content}</p>
+                        {m.space_id && m.element_id ? (
+                          <HomeSpatialCard
+                            record={m}
+                            revision={m.space_revision ?? m.linked_revision}
+                            kind={m.kind === "location" ? "storage" : "object"}
+                            title={m.title}
+                            description={m.content}
+                            storedItem={m.kind === "location" ? m.asset_name : null}
+                            actionLabel="Show in Spaces"
+                            onShowSpace={onShowSpace}
+                          />
+                        ) : (
+                          <>
+                            <h3>{m.title}</h3>
+                            <p>{m.content}</p>
+                          </>
+                        )}
                         <div className="row-actions">
                           <button
                             className="text-button"

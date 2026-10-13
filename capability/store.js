@@ -53,7 +53,8 @@ export function openStore(path) {
     );
     CREATE TABLE IF NOT EXISTS maintenance (
       id TEXT PRIMARY KEY, asset_id TEXT NOT NULL REFERENCES assets(id), title TEXT NOT NULL,
-      due_on TEXT, interval_days INTEGER, source TEXT NOT NULL, last_completed_on TEXT, revision INTEGER NOT NULL DEFAULT 1
+      due_on TEXT, interval_days INTEGER, source TEXT NOT NULL, last_completed_on TEXT,
+      revision INTEGER NOT NULL DEFAULT 1, space_id TEXT, element_id TEXT
     );
     CREATE TABLE IF NOT EXISTS incidents (
       id TEXT PRIMARY KEY, asset_id TEXT NOT NULL REFERENCES assets(id), symptom TEXT NOT NULL,
@@ -72,19 +73,34 @@ export function openStore(path) {
     CREATE TABLE IF NOT EXISTS memories (
       id TEXT PRIMARY KEY, title TEXT NOT NULL, content TEXT NOT NULL, kind TEXT NOT NULL,
       asset_id TEXT REFERENCES assets(id), source TEXT NOT NULL, revision INTEGER NOT NULL,
-      updated_at TEXT NOT NULL
+      updated_at TEXT NOT NULL, space_id TEXT, element_id TEXT
+    );
+    CREATE TABLE IF NOT EXISTS space_objects (
+      space_id TEXT NOT NULL, element_id TEXT NOT NULL,
+      asset_id TEXT NOT NULL REFERENCES assets(id),
+      space_name TEXT NOT NULL, element_label TEXT NOT NULL, revision INTEGER NOT NULL,
+      PRIMARY KEY(space_id, element_id)
     );
     CREATE TABLE IF NOT EXISTS tasks (
       id TEXT PRIMARY KEY, title TEXT NOT NULL, kind TEXT NOT NULL, notes TEXT NOT NULL,
       asset_id TEXT REFERENCES assets(id), due_on TEXT, interval_days INTEGER,
       status TEXT NOT NULL CHECK(status IN ('open','done','cancelled')),
-      last_completed_on TEXT, revision INTEGER NOT NULL, created_at TEXT NOT NULL
+      last_completed_on TEXT, revision INTEGER NOT NULL, created_at TEXT NOT NULL,
+      space_id TEXT, element_id TEXT
     );
     CREATE TABLE IF NOT EXISTS task_history (
       id TEXT PRIMARY KEY, task_id TEXT NOT NULL REFERENCES tasks(id), title TEXT NOT NULL,
       completed_on TEXT NOT NULL, notes TEXT NOT NULL, created_at TEXT NOT NULL
     );
   `);
+  const memoryColumns = db
+    .prepare("PRAGMA table_info(memories)")
+    .all()
+    .map((column) => column.name);
+  if (!memoryColumns.includes("space_id"))
+    db.exec("ALTER TABLE memories ADD COLUMN space_id TEXT");
+  if (!memoryColumns.includes("element_id"))
+    db.exec("ALTER TABLE memories ADD COLUMN element_id TEXT");
   // Additive migration keeps existing plans and IDs intact.
   if (
     !db
@@ -95,6 +111,38 @@ export function openStore(path) {
     db.exec(
       "ALTER TABLE maintenance ADD COLUMN revision INTEGER NOT NULL DEFAULT 1",
     );
+  for (const [table, column, type] of [
+    ["maintenance", "space_id", "TEXT"],
+    ["maintenance", "element_id", "TEXT"],
+    ["maintenance", "space_revision", "INTEGER"],
+    ["tasks", "space_id", "TEXT"],
+    ["tasks", "element_id", "TEXT"],
+    ["tasks", "space_revision", "INTEGER"],
+    ["memories", "space_name", "TEXT"],
+    ["memories", "element_label", "TEXT"],
+    ["memories", "space_revision", "INTEGER"],
+    ["space_objects", "revision", "INTEGER NOT NULL DEFAULT 1"],
+  ]) {
+    if (
+      !db
+        .prepare(`PRAGMA table_info(${table})`)
+        .all()
+        .some((field) => field.name === column)
+    )
+      db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`);
+  }
+  // Snapshot legacy anchors once; later model-link updates must not move saved pins.
+  db.exec(`
+    UPDATE memories SET
+      space_name=COALESCE(space_name,(SELECT space_name FROM space_objects s WHERE s.space_id=memories.space_id AND s.element_id=memories.element_id)),
+      element_label=COALESCE(element_label,(SELECT element_label FROM space_objects s WHERE s.space_id=memories.space_id AND s.element_id=memories.element_id)),
+      space_revision=COALESCE(space_revision,(SELECT revision FROM space_objects s WHERE s.space_id=memories.space_id AND s.element_id=memories.element_id))
+    WHERE space_id IS NOT NULL AND (space_name IS NULL OR element_label IS NULL OR space_revision IS NULL);
+    UPDATE tasks SET space_revision=(SELECT revision FROM space_objects s WHERE s.space_id=tasks.space_id AND s.element_id=tasks.element_id AND s.asset_id=tasks.asset_id)
+    WHERE space_id IS NOT NULL AND space_revision IS NULL;
+    UPDATE maintenance SET space_revision=(SELECT revision FROM space_objects s WHERE s.space_id=maintenance.space_id AND s.element_id=maintenance.element_id AND s.asset_id=maintenance.asset_id)
+    WHERE space_id IS NOT NULL AND space_revision IS NULL;
+  `);
   const all = (sql, ...params) => db.prepare(sql).all(...params);
   const one = (sql, ...params) => db.prepare(sql).get(...params);
   const run = (sql, ...params) => db.prepare(sql).run(...params);
@@ -106,6 +154,23 @@ export function openStore(path) {
         404,
       );
     return found;
+  };
+  const spatialLink = (spaceId, elementId, assetId, revision) => {
+    const link = one(
+      "SELECT * FROM space_objects WHERE space_id=? AND element_id=?",
+      spaceId,
+      elementId,
+    );
+    if (!link || link.asset_id !== assetId)
+      throw new UserError(
+        "Link this RoomTrace object to the same HomeKeeper item before pinning it.",
+      );
+    if (link.revision !== revision)
+      throw new UserError(
+        "This model link changed. Reconfirm the object link before pinning it.",
+        409,
+      );
+    return link;
   };
   function currentRecord(table, id, revision) {
     const row = one(`SELECT * FROM ${table} WHERE id=?`, id);
@@ -151,11 +216,23 @@ export function openStore(path) {
         id,
       ),
       maintenance: all(
-        "SELECT * FROM maintenance WHERE asset_id=? ORDER BY due_on",
+        `SELECT m.*,s.space_name,s.element_label,COALESCE(m.space_revision,s.revision) AS linked_revision
+         FROM maintenance m LEFT JOIN space_objects s
+           ON s.space_id=m.space_id AND s.element_id=m.element_id AND s.asset_id=m.asset_id
+         WHERE m.asset_id=? ORDER BY m.due_on`,
         id,
       ),
       incidents: all(
         "SELECT * FROM incidents WHERE asset_id=? ORDER BY opened_on DESC",
+        id,
+      ),
+      locations: all(
+        `SELECT m.*,COALESCE(m.space_name,s.space_name) AS space_name,
+           COALESCE(m.element_label,s.element_label) AS element_label,
+           COALESCE(m.space_revision,s.revision) AS linked_revision
+         FROM memories m LEFT JOIN space_objects s
+           ON s.space_id=m.space_id AND s.element_id=m.element_id
+         WHERE m.asset_id=? AND m.kind='location' ORDER BY m.updated_at DESC`,
         id,
       ),
       events: all(
@@ -177,15 +254,32 @@ export function openStore(path) {
          UNION ALL SELECT id,NULL AS asset_id,title,kind,json_array_length(pages) AS page_count,created_at FROM document_inbox
          ORDER BY created_at DESC`,
       ),
-      memories: all("SELECT * FROM memories ORDER BY updated_at DESC"),
+      memories: all(
+        `SELECT m.*,a.name AS asset_name,COALESCE(m.space_name,s.space_name) AS space_name,
+           COALESCE(m.element_label,s.element_label) AS element_label,
+           COALESCE(m.space_revision,s.revision) AS linked_revision
+         FROM memories m LEFT JOIN assets a ON a.id=m.asset_id
+         LEFT JOIN space_objects s ON s.space_id=m.space_id AND s.element_id=m.element_id
+         ORDER BY m.updated_at DESC`,
+      ),
+      space_objects: all(
+        "SELECT s.space_id,s.element_id,s.space_name,s.element_label,s.revision,s.asset_id,a.name AS asset_name,a.room FROM space_objects s JOIN assets a ON a.id=s.asset_id ORDER BY a.room,a.name",
+      ),
       tasks: all(
-        "SELECT * FROM tasks ORDER BY status,due_on IS NULL,due_on,title",
+        `SELECT t.*,s.space_name,s.element_label,COALESCE(t.space_revision,s.revision) AS linked_revision
+         FROM tasks t LEFT JOIN space_objects s
+           ON s.space_id=t.space_id AND s.element_id=t.element_id AND s.asset_id=t.asset_id
+         ORDER BY t.status,t.due_on IS NULL,t.due_on,t.title`,
       ),
       task_history: all(
         "SELECT * FROM task_history ORDER BY completed_on DESC,created_at DESC",
       ),
       maintenance: all(
-        "SELECT m.*,a.name AS asset_name,a.room FROM maintenance m JOIN assets a ON a.id=m.asset_id WHERE due_on IS NOT NULL ORDER BY due_on",
+        `SELECT m.*,a.name AS asset_name,a.room,s.space_name,s.element_label,
+           COALESCE(m.space_revision,s.revision) AS linked_revision
+         FROM maintenance m JOIN assets a ON a.id=m.asset_id
+         LEFT JOIN space_objects s ON s.space_id=m.space_id AND s.element_id=m.element_id AND s.asset_id=m.asset_id
+         WHERE due_on IS NOT NULL ORDER BY due_on`,
       ),
       incidents: all(
         "SELECT i.*,a.name AS asset_name,a.room FROM incidents i JOIN assets a ON a.id=i.asset_id WHERE status='open' ORDER BY opened_on DESC",
@@ -255,24 +349,88 @@ export function openStore(path) {
       );
       return passport(id);
     },
+    link_space_object(a) {
+      asset(a.asset_id);
+      const prior = one(
+        "SELECT * FROM space_objects WHERE space_id=? AND element_id=?",
+        a.space_id,
+        a.element_id,
+      );
+      if (prior && prior.asset_id !== a.asset_id)
+        throw new UserError("This model object is already linked to another home item.", 409);
+      if (prior && a.revision < prior.revision)
+        throw new UserError("This model link changed. Refresh the model before linking.", 409);
+      run(
+        `INSERT INTO space_objects
+          (space_id,element_id,asset_id,space_name,element_label,revision)
+         VALUES (?,?,?,?,?,?) ON CONFLICT(space_id,element_id) DO UPDATE SET
+          space_name=excluded.space_name,element_label=excluded.element_label,
+          revision=excluded.revision`,
+        a.space_id,
+        a.element_id,
+        a.asset_id,
+        a.space_name,
+        a.element_label,
+        a.revision,
+      );
+      return one(
+        "SELECT s.space_id,s.element_id,s.space_name,s.element_label,s.revision,s.asset_id,a.name AS asset_name FROM space_objects s JOIN assets a ON a.id=s.asset_id WHERE s.space_id=? AND s.element_id=?",
+        a.space_id,
+        a.element_id,
+      );
+    },
+    save_spatial_location(a) {
+      return commands.save_memory(a);
+    },
     save_memory(a) {
-      if (a.asset_id) asset(a.asset_id);
       const prior = a.memory_id
         ? currentRecord("memories", a.memory_id, a.expected_revision)
         : null;
+      const storedItemId = a.asset_id === undefined ? (prior?.asset_id ?? null) : a.asset_id;
+      if (storedItemId) asset(storedItemId);
+      if (prior?.space_id && a.space_id === undefined &&
+          (storedItemId !== prior.asset_id || a.kind !== "location"))
+        throw new UserError("Use the household location UI to change a model-anchored location.");
+      const spaceId = a.space_id === undefined ? (prior?.space_id ?? null) : a.space_id;
+      const elementId =
+        a.element_id === undefined ? (prior?.element_id ?? null) : a.element_id;
+      if ((spaceId === null) !== (elementId === null))
+        throw new UserError("A spatial location needs both a space and an object.");
+      if (spaceId && (a.kind !== "location" || !storedItemId))
+        throw new UserError(
+          "A model pin requires a location memory attached to a home item.",
+        );
+      // The stored item is independent of the container's identity/passport link.
+      const spaceRevision = spaceId
+        ? (a.space_revision ?? prior?.space_revision ?? null) : null;
+      const spaceName = spaceId
+        ? (a.space_name ?? prior?.space_name ?? null) : null;
+      const elementLabel = spaceId
+        ? (a.element_label ?? prior?.element_label ?? null) : null;
       const id = a.memory_id || randomUUID();
       run(
-        `INSERT INTO memories VALUES (?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET
-        title=excluded.title,content=excluded.content,kind=excluded.kind,asset_id=excluded.asset_id,
-        source=excluded.source,revision=excluded.revision,updated_at=excluded.updated_at`,
+        `INSERT INTO memories
+          (id,title,content,kind,asset_id,source,revision,updated_at,space_id,element_id,space_name,element_label,space_revision)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET
+          title=excluded.title,content=excluded.content,kind=excluded.kind,
+          asset_id=excluded.asset_id,source=excluded.source,
+          revision=excluded.revision,updated_at=excluded.updated_at,
+          space_id=excluded.space_id,element_id=excluded.element_id,
+          space_name=excluded.space_name,element_label=excluded.element_label,
+          space_revision=excluded.space_revision`,
         id,
         a.title,
         a.content,
         a.kind,
-        a.asset_id,
+        storedItemId,
         a.source,
         (prior?.revision || 0) + 1,
         new Date().toISOString(),
+        spaceId,
+        elementId,
+        spaceName,
+        elementLabel,
+        spaceRevision,
       );
       return one("SELECT * FROM memories WHERE id=?", id);
     },
@@ -285,28 +443,55 @@ export function openStore(path) {
           "Saved memory only. Previous conversations and backups are unchanged.",
       };
     },
+    save_spatial_task(a) {
+      return commands.save_task(a);
+    },
     save_task(a) {
       if (a.asset_id) asset(a.asset_id);
       const prior = a.task_id
         ? currentRecord("tasks", a.task_id, a.expected_revision)
         : null;
+      const assetId = a.asset_id === undefined ? (prior?.asset_id ?? null) : a.asset_id;
+      const explicitPin = a.space_id !== undefined ||
+        a.element_id !== undefined || a.space_revision !== undefined;
+      if (prior?.space_id && !explicitPin && assetId !== prior.asset_id)
+        throw new UserError("Use the household object UI to change a model-pinned task's item.");
+      const spaceRevision = a.space_id === null ? null :
+        (explicitPin ? (a.space_revision ?? null) : (prior?.space_revision ?? null));
+      const spaceId =
+        a.space_id === undefined ? (prior?.space_id ?? null) : a.space_id;
+      const elementId =
+        a.element_id === undefined ? (prior?.element_id ?? null) : a.element_id;
+      if ((spaceId === null) !== (elementId === null))
+        throw new UserError("A model task needs both a space and an object.");
+      if (spaceId && (explicitPin || !prior)) {
+        if (!assetId)
+          throw new UserError("A model task needs a linked home item.");
+        spatialLink(spaceId, elementId, assetId, spaceRevision);
+      }
       const id = a.task_id || randomUUID();
       run(
-        `INSERT INTO tasks VALUES (?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET
-        title=excluded.title,kind=excluded.kind,notes=excluded.notes,asset_id=excluded.asset_id,
-        due_on=excluded.due_on,interval_days=excluded.interval_days,status=excluded.status,
-        revision=excluded.revision`,
+        `INSERT INTO tasks
+          (id,title,kind,notes,asset_id,due_on,interval_days,status,last_completed_on,revision,created_at,space_id,element_id,space_revision)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET
+          title=excluded.title,kind=excluded.kind,notes=excluded.notes,asset_id=excluded.asset_id,
+          due_on=excluded.due_on,interval_days=excluded.interval_days,status=excluded.status,
+          revision=excluded.revision,space_id=excluded.space_id,element_id=excluded.element_id,
+          space_revision=excluded.space_revision`,
         id,
         a.title,
         a.kind,
         a.notes,
-        a.asset_id,
+        assetId,
         a.due_on,
         a.interval_days,
         a.status,
         prior?.last_completed_on || null,
         (prior?.revision || 0) + 1,
         new Date().toISOString(),
+        spaceId,
+        elementId,
+        spaceRevision,
       );
       return one("SELECT * FROM tasks WHERE id=?", id);
     },
@@ -336,17 +521,26 @@ export function openStore(path) {
       );
       return one("SELECT * FROM tasks WHERE id=?", task.id);
     },
+    schedule_spatial_maintenance(a) {
+      return commands.schedule_maintenance(a);
+    },
     schedule_maintenance(a) {
       asset(a.asset_id);
+      if (a.space_id) spatialLink(a.space_id, a.element_id, a.asset_id, a.space_revision);
+      if ((a.space_id == null) !== (a.element_id == null))
+        throw new UserError("A maintenance pin needs both a space and an object.");
       const id = randomUUID();
       run(
-        "INSERT INTO maintenance(id,asset_id,title,due_on,interval_days,source,last_completed_on) VALUES (?,?,?,?,?,?,NULL)",
+        "INSERT INTO maintenance(id,asset_id,title,due_on,interval_days,source,last_completed_on,space_id,element_id,space_revision) VALUES (?,?,?,?,?,?,NULL,?,?,?)",
         id,
         a.asset_id,
         a.title,
         a.due_on,
         a.interval_days,
         a.source,
+        a.space_id || null,
+        a.element_id || null,
+        a.space_revision ?? null,
       );
       event(
         a.asset_id,
@@ -371,12 +565,26 @@ export function openStore(path) {
           "This plan changed. Read it again before updating.",
           409,
         );
+      const explicitPin = a.space_id !== undefined ||
+        a.element_id !== undefined || a.space_revision !== undefined;
+      const spaceId = a.space_id === undefined ? plan.space_id : a.space_id;
+      const elementId =
+        a.element_id === undefined ? plan.element_id : a.element_id;
+      const spaceRevision = a.space_id === null ? null :
+        (explicitPin ? (a.space_revision ?? null) : (plan.space_revision ?? null));
+      if ((spaceId === null) !== (elementId === null))
+        throw new UserError("A maintenance pin needs both a space and an object.");
+      if (spaceId && explicitPin)
+        spatialLink(spaceId, elementId, plan.asset_id, spaceRevision);
       run(
-        "UPDATE maintenance SET title=?,due_on=?,interval_days=?,source=?,revision=revision+1 WHERE id=?",
+        "UPDATE maintenance SET title=?,due_on=?,interval_days=?,source=?,revision=revision+1,space_id=?,element_id=?,space_revision=? WHERE id=?",
         a.title,
         a.due_on,
         a.interval_days,
         a.source,
+        spaceId,
+        elementId,
+        spaceRevision,
         plan.id,
       );
       return one("SELECT * FROM maintenance WHERE id=?", plan.id);

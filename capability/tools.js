@@ -37,6 +37,21 @@ const request = {
       "Unique idempotency key. Reuse only when retrying the identical action.",
     ),
 };
+const spatial = {
+  space_id: z.string().regex(/^[a-f0-9]{32}$/).nullable().optional(),
+  element_id: z
+    .string()
+    .regex(/^[A-Za-z][A-Za-z0-9_-]{0,63}$/)
+    .nullable()
+    .optional(),
+  space_revision: z.number().int().positive().nullable().optional(),
+};
+const pairedSpatial = (a) =>
+  (a.space_id === undefined && a.element_id === undefined &&
+    a.space_revision === undefined) ||
+  (a.space_id === null && a.element_id === null &&
+    (a.space_revision === undefined || a.space_revision === null)) ||
+  (a.space_id != null && a.element_id != null && a.space_revision != null);
 const paid = (schema) =>
   schema.refine(
     (a) => (a.cost_minor === null) === (a.currency === null),
@@ -51,13 +66,13 @@ const tool = (title, description, schema, write = false) => ({
 
 export const tools = {
   get_home: tool(
-    "Read home",
-    "Read the household: home items, uploaded document IDs and titles (asset_id null means unfiled intake), saved facts/preferences/contacts/locations, shopping and tasks (including completed/cancelled), routines, repairs, history and spending by currency. Saved records are user-reported facts. Read before writing to identify records and avoid duplicates.",
+    "Read household",
+    "Read items, documents, saved facts, preferences, contacts and locations, model-object links, tasks, routines, repairs, history and spending. Facts are user-reported. Read before writing to identify records and avoid duplicates.",
     z.object({}),
   ),
   get_passport: tool(
     "Read Home Passport",
-    "Read a home item's passport, user-recorded warranty dates, document IDs, repair history, maintenance and cost totals. Items include rooms, plants, furniture, fixtures, systems and appliances. Never infer coverage from an absent warranty date.",
+    "Read a home item's passport, user-recorded warranty dates, documents, saved spatial locations, repair history, maintenance and cost totals. Items include rooms, plants, furniture, fixtures, systems and appliances. Never infer coverage from an absent warranty date.",
     z.object({ asset_id: id }),
   ),
   read_document: tool(
@@ -113,7 +128,7 @@ export const tools = {
   ),
   save_memory: tool(
     "Remember a household detail",
-    "Persist an explicit household fact, preference, item location, contact or household-member detail across conversations. Read existing memories first. To correct a fact, update its memory_id with current expected_revision, do not create a contradictory duplicate. Source is the user's supporting statement. Never save guesses, passwords or advice as facts.",
+    "Persist an explicit household fact, preference, item location, contact or household-member detail across conversations. Read existing memories first. To correct a fact, update its memory_id with current expected_revision. Omit asset_id to preserve its item association. Existing model anchors are preserved on text edits; only the household UI can create, move or clear a model anchor. Source is the user's supporting statement. Never save guesses, passwords or advice as facts.",
     z
       .object({
         ...request,
@@ -133,9 +148,10 @@ export const tools = {
         title: text,
         content: text,
         kind: z.enum(["fact", "location", "contact", "preference"]),
-        asset_id: id.nullable().default(null),
+        asset_id: id.nullable().optional(),
         source: text,
       })
+      .strict()
       .refine(
         (a) => !a.memory_id || a.expected_revision !== undefined,
         "An update needs the current revision.",
@@ -174,7 +190,7 @@ export const tools = {
         title: text,
         kind: z.enum(["task", "shopping", "routine"]),
         notes: note,
-        asset_id: id.nullable().default(null),
+        asset_id: id.nullable().optional(),
         due_on: date.nullable().default(null),
         interval_days: z
           .number()
@@ -185,6 +201,7 @@ export const tools = {
           .default(null),
         status: z.enum(["open", "cancelled"]).default("open"),
       })
+      .strict()
       .refine(
         (a) => !a.task_id || a.expected_revision !== undefined,
         "An update needs the current revision.",
@@ -217,7 +234,7 @@ export const tools = {
       due_on: date,
       interval_days: z.number().int().min(1).max(3650).nullable().default(null),
       source: text,
-    }),
+    }).strict(),
     true,
   ),
   update_maintenance: tool(
@@ -234,6 +251,7 @@ export const tools = {
         interval_days: z.number().int().min(1).max(3650).nullable(),
         source: text,
       })
+      .strict()
       .refine(
         (a) => a.due_on !== null || a.interval_days === null,
         "A stopped plan cannot recur.",
@@ -300,6 +318,54 @@ export const tools = {
     true,
   ),
 };
+const uiActions = {
+  save_spatial_task: tools.save_task.schema.safeExtend({
+    asset_id: id,
+    space_id: spatial.space_id.unwrap().unwrap(),
+    element_id: spatial.element_id.unwrap().unwrap(),
+    space_revision: spatial.space_revision.unwrap().unwrap(),
+  }),
+  schedule_spatial_maintenance: tools.schedule_maintenance.schema.safeExtend({
+    space_id: spatial.space_id.unwrap().unwrap(),
+    element_id: spatial.element_id.unwrap().unwrap(),
+    space_revision: spatial.space_revision.unwrap().unwrap(),
+  }),
+  link_space_object: z.object({
+    ...request,
+    space_id: z.string().regex(/^[a-f0-9]{32}$/),
+    element_id: z.string().regex(/^[A-Za-z][A-Za-z0-9_-]{0,63}$/),
+    space_name: text,
+    element_label: text,
+    revision: z.number().int().positive(),
+    asset_id: id,
+  }),
+  save_spatial_location: tools.save_memory.schema.safeExtend({
+    ...spatial,
+    space_name: text.nullable().optional(),
+    element_label: text.nullable().optional(),
+  })
+    .refine(pairedSpatial, "A model pin needs both IDs and its model revision.")
+    .refine(
+      (a) => a.space_id == null ||
+        (a.kind === "location" && a.asset_id != null &&
+          a.space_name != null && a.element_label != null),
+      "A storage pin needs the stored item and container labels.",
+    )
+    .refine(
+      (a) => a.space_id != null ||
+        (a.space_name == null && a.element_label == null),
+      "Model labels require a model pin.",
+    ),
+};
+
+export function executeUiAction(store, name, input) {
+  const schema = uiActions[name];
+  if (!schema) throw new UserError("Unknown UI action.", 404);
+  const args = schema.parse(input);
+  const { request_id, ...data } = args;
+  return store.mutate(name, data, request_id || randomUUID());
+}
+
 
 export function execute(store, name, input) {
   // Keep existing clients working; the agent discovers only the whole-home name.

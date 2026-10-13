@@ -6,7 +6,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { z } from "zod";
 import { openStore, UserError } from "./store.js";
-import { tools, execute } from "./tools.js";
+import { tools, execute, executeUiAction } from "./tools.js";
 
 export function errorHandler(error, req, res, next) {
   if (res.headersSent) return next(error);
@@ -81,7 +81,7 @@ export function createCapability({ path, token }) {
           .filter((plan) => plan.due_on)
           .map(
             (plan) =>
-              `${plan.due_on}: ${plan.title}${plan.interval_days ? `, every ${plan.interval_days} days` : ""}\nSource: ${plan.source}`,
+              `${plan.due_on}: ${plan.title}${plan.interval_days ? `, every ${plan.interval_days} days` : ""}${plan.element_label ? ` · ${plan.space_name}: ${plan.element_label}` : ""}\nSource: ${plan.source}`,
           ),
       ],
       [
@@ -92,6 +92,13 @@ export function createCapability({ path, token }) {
         ),
       ],
       ["Recorded spending", item.costs.map((cost) => cost.amount_display)],
+      [
+        "Saved locations",
+        item.locations.map(
+          (location) =>
+            `${location.title}: ${location.content}${location.element_label ? ` · ${location.space_name}: ${location.element_label}` : ""}`,
+        ),
+      ],
       [
         "Documents on file",
         item.documents.map(
@@ -111,6 +118,9 @@ export function createCapability({ path, token }) {
   });
   app.post("/api/actions/:name", (req, res) =>
     res.json(execute(store, req.params.name, req.body)),
+  );
+  app.post("/api/ui-actions/:name", (req, res) =>
+    res.json(executeUiAction(store, req.params.name, req.body)),
   );
   const upload = multer({
     storage: multer.memoryStorage(),

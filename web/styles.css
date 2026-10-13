@@ -999,6 +999,141 @@ details > p {
 .passport-section .issue-row:first-child {
   padding-top: 10px;
 }
+.home-spatial-card {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr);
+  gap: 14px;
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid #70d5ff30;
+  border-radius: 12px;
+  background: #172932;
+}
+.home-spatial-preview {
+  display: grid;
+  place-items: center;
+  align-self: start;
+  width: 112px;
+  height: 112px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff08;
+  color: #a9c5d4;
+}
+.home-spatial-preview img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.home-spatial-copy {
+  min-width: 0;
+}
+.home-spatial-badge {
+  display: inline-block;
+  color: #b9eaff;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+.home-spatial-copy h3,
+.home-spatial-object {
+  display: block;
+  margin-top: 6px;
+  font-size: 14px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+.home-spatial-copy .home-spatial-room,
+.home-spatial-copy .home-spatial-status {
+  display: block;
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+.home-spatial-item {
+  margin-top: 6px;
+  overflow-wrap: anywhere;
+}
+.home-spatial-item small {
+  display: block;
+  color: var(--muted);
+  font-size: 10px;
+}
+.home-spatial-item strong {
+  display: block;
+  margin-top: 2px;
+  font-size: 14px;
+  line-height: 1.45;
+}
+.home-spatial-item + .home-spatial-object {
+  font-size: 12px;
+  font-weight: 500;
+}
+.home-spatial-object small {
+  color: var(--muted);
+  font-size: inherit;
+  font-weight: 400;
+}
+.home-spatial-copy .home-spatial-status {
+  margin-top: 7px;
+  color: #adc6d3;
+  font-size: 10px;
+}
+.home-spatial-copy p {
+  margin-top: 6px;
+  color: #e2e9ed;
+  font-size: 13px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.home-spatial-location {
+  margin-top: 6px;
+  color: #e2e9ed;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+.home-spatial-action {
+  margin-top: 8px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+}
+.home-spatial-note {
+  margin-top: 8px;
+}
+.home-spatial-note > summary {
+  color: var(--muted);
+  font-size: 11px;
+}
+.home-spatial-card--compact {
+  grid-template-columns: 88px minmax(0, 1fr);
+  gap: 10px;
+  padding: 9px;
+}
+.home-spatial-card--compact .home-spatial-preview {
+  width: 88px;
+  height: 100px;
+}
+.home-location-note {
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+.home-location-note strong {
+  display: block;
+  margin-top: 7px;
+}
+.home-location-note p {
+  margin-top: 5px;
+  font-size: 13px;
+}
 dl {
   margin: 12px 0;
 }

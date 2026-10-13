@@ -127,9 +127,46 @@ export function createHost(config) {
         /^\/(home|export|documents)$/.test(route) ||
         /^\/assets\/[a-f\d-]+(?:\/(?:documents|report))?$/.test(route) ||
         /^\/actions\/[a-z_]+$/.test(route) ||
+        /^\/ui-actions\/[a-z_]+$/.test(route) ||
         /^\/documents\/[a-f\d-]+\/download$/.test(route)
       ))
         throw new UserError("Endpoint not found.", 404);
+      if (req.method === "POST" &&
+          /^\/ui-actions\/(link_space_object|save_spatial_task|schedule_spatial_maintenance|save_spatial_location)$/.test(route)) {
+        let input;
+        try {
+          input = JSON.parse(req.body.toString());
+        } catch {
+          throw new UserError("Send a JSON object for this model action.");
+        }
+        // Clearing a stored-location anchor does not create or move a pin.
+        if (route !== "/ui-actions/save_spatial_location" || input?.space_id != null) {
+          const spaceId = z.string().regex(/^[a-f0-9]{32}$/).parse(input?.space_id);
+          const revision = z.number().int().positive().parse(
+            route === "/ui-actions/link_space_object" ? input?.revision : input?.space_revision,
+          );
+          let current;
+          try {
+            const response = await fetch(
+              `${config.roomtraceUrl || "http://127.0.0.1:8790"}/api/maps/${spaceId}/architecture`,
+              {
+                headers: { Authorization: `Bearer ${config.token}` },
+                signal: AbortSignal.timeout(5000),
+                redirect: "error",
+                cache: "no-store",
+              },
+            );
+            if (response.ok) current = await response.json();
+          } catch {
+            // No new anchor is safe when the live model cannot be read.
+          }
+          if (current?.revision !== revision)
+            throw new UserError(
+              "The RoomTrace model is unavailable or changed. Refresh it before linking or pinning.",
+              409,
+            );
+        }
+      }
       let upstream;
       try {
         upstream = await fetch(`${config.capabilityUrl}/api${route}`, {

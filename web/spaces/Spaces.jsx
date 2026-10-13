@@ -28,15 +28,16 @@ if (!window.location.hash && savedSpace)
     "",
     `#${new URLSearchParams({ space: savedSpace })}`,
   );
-const readSelection = () =>
-  new URLSearchParams(window.location.hash.slice(1)).get("space");
+const readSelection = () => window.location.hash.slice(1);
 const subscribeSelection = (listener) => {
   window.addEventListener("hashchange", listener);
   return () => window.removeEventListener("hashchange", listener);
 };
 
-function App() {
-  const selected = useSyncExternalStore(subscribeSelection, readSelection);
+function App({ home, onHomeChanged, onHomeItem, onHomeAction }) {
+  const hash = useSyncExternalStore(subscribeSelection, readSelection);
+  const selected = new URLSearchParams(hash).get("space");
+  const targetElementId = new URLSearchParams(hash).get("element");
   const [library, setLibrary] = useState(false);
   const [help, setHelp] = useState(false);
   const libraryButton = useRef(null);
@@ -175,7 +176,15 @@ function App() {
           </button>
         )}
         {job ? (
-          <Workspace key={job.id} job={job} />
+          <Workspace
+            key={job.id}
+            job={job}
+            home={home}
+            onHomeChanged={onHomeChanged}
+            onHomeItem={onHomeItem}
+            onHomeAction={onHomeAction}
+            targetElementId={targetElementId}
+          />
         ) : selected && maps.isPending ? (
           <p role="status" className="job-state">
             Opening your space…
@@ -197,10 +206,10 @@ function App() {
   );
 }
 
-export default function Spaces() {
+export default function Spaces(props) {
   return (
     <QueryClientProvider client={client}>
-      <App />
+      <App {...props} />
     </QueryClientProvider>
   );
 }

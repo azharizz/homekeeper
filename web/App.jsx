@@ -63,6 +63,23 @@ export function App({ initial }) {
     setSessions(conversations);
     setError("");
   }
+  async function saveHomeAction(action, values) {
+    const route =
+      [
+        "link_space_object",
+        "save_spatial_location",
+        "save_spatial_task",
+        "schedule_spatial_maintenance",
+      ].includes(action)
+        ? `/api/ui-actions/${action}`
+        : `/api/actions/${action}`;
+    const result = await api(route, {
+      method: "POST",
+      body: JSON.stringify({ ...values, request_id: crypto.randomUUID() }),
+    });
+    await refresh();
+    return result;
+  }
   async function send(input, consumeDraft = false) {
     if (busy) return;
     setBusy(true);
@@ -200,6 +217,14 @@ export function App({ initial }) {
     setItemId(id);
     setPanel("items");
   };
+  const openSpatialTarget = (spaceId, elementId) => {
+    window.location.hash = new URLSearchParams({
+      space: spaceId,
+      element: elementId,
+    }).toString();
+    sessionStorage.setItem("roomtrace:space", spaceId);
+    setPanel("spaces");
+  };
   const togglePanel = (name) => {
     setPanel(panel === name ? null : name);
     setItemId(null);
@@ -319,8 +344,13 @@ export function App({ initial }) {
             </main>
           }
         >
-          <Spaces />
-        </Suspense>
+          <Spaces
+            home={home}
+            onHomeChanged={refresh}
+            onHomeItem={openItem}
+            onHomeAction={saveHomeAction}
+          />
+          </Suspense>
       )}
       {panel && panel !== "spaces" && (
         <aside
@@ -351,6 +381,7 @@ export function App({ initial }) {
                 onItem={openItem}
                 onBack={() => setItemId(null)}
                 onAsk={ask}
+                onShowSpace={openSpatialTarget}
               />
             )}
             {panel === "chats" && (

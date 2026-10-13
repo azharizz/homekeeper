@@ -73,7 +73,14 @@ function ScaleForm({ scene, points, setPoints }) {
   );
 }
 
-export default function Workspace({ job }) {
+export default function Workspace({
+  job,
+  home,
+  onHomeChanged,
+  onHomeItem,
+  onHomeAction,
+  targetElementId,
+}) {
   const cache = useQueryClient();
   const [observation, setObservation] = useState(null);
   const [points, setPoints] = useState([]);
@@ -117,9 +124,14 @@ export default function Workspace({ job }) {
   if (scene.mode === "architecture")
     return (
       <ArchitectureView
-        key={`${scene.id}:${scene.revision}`}
+        key={`${scene.id}:${scene.revision}:${targetElementId || ""}`}
         scene={scene}
         observation={observation}
+        home={home}
+        onHomeChanged={onHomeChanged}
+        onHomeItem={onHomeItem}
+        onHomeAction={onHomeAction}
+        targetElementId={targetElementId}
       >
         <Observation
           key={`${scene.id}:${scene.revision}`}

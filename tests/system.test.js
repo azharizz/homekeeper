@@ -5,8 +5,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { once } from "node:events";
+import { createServer } from "node:http";
+import { DatabaseSync } from "node:sqlite";
 import { openStore } from "../capability/store.js";
-import { execute } from "../capability/tools.js";
+import { execute, executeUiAction, tools } from "../capability/tools.js";
 import { createCapability } from "../capability/server.js";
 import { createHost } from "../alexa_host/server.js";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
@@ -40,7 +42,7 @@ test("real lifecycle, persistence, HTTP boundaries, uploads and MCP", async () =
   const path = join(directory, "home.sqlite");
   const token = randomUUID() + randomUUID();
   let store = openStore(path);
-  let capabilityServer, hostServer, capability, host, client;
+  let capabilityServer, hostServer, roomtraceServer, capability, host, client;
   try {
     assert.equal(store.home().assets.length, 0, "No fake household is seeded");
     const request_id = randomUUID();
@@ -375,6 +377,245 @@ test("real lifecycle, persistence, HTTP boundaries, uploads and MCP", async () =
       expected_revision: corrected.revision,
     });
     assert.equal(store.home().memories.length, 0);
+    const storageItem = execute(store, "save_home_item", {
+      name: "TEST key box",
+      category: "storage",
+    });
+    const spaceId = "a".repeat(32);
+    const elementId = "cabinet_1";
+    const linkInput = {
+      space_id: spaceId,
+      element_id: elementId,
+      asset_id: storageItem.id,
+      space_name: "TEST room",
+      element_label: "TEST cabinet",
+      revision: 1,
+      request_id: randomUUID(),
+    };
+    const modelLink = executeUiAction(store, "link_space_object", linkInput);
+    assert.equal(modelLink.asset_id, storageItem.id);
+    assert.equal(tools.link_space_object, undefined);
+    assert.throws(
+      () => execute(store, "link_space_object", linkInput),
+      /Unknown tool/,
+      "Model clients cannot invent UI-confirmed object links",
+    );
+    assert.throws(
+      () =>
+        executeUiAction(store, "link_space_object", {
+          ...linkInput,
+          request_id: randomUUID(),
+          asset_id: asset.id,
+        }),
+      /already linked/,
+    );
+    const modelLocation = executeUiAction(store, "save_spatial_location", {
+      title: "TEST key box location",
+      content: "Inside the lower cabinet",
+      kind: "location",
+      source: "Explicit test household statement",
+      asset_id: storageItem.id,
+      space_id: spaceId,
+      element_id: elementId,
+      space_revision: 1,
+      space_name: "TEST room",
+      element_label: "TEST cabinet",
+    });
+    assert.equal(store.passport(storageItem.id).locations[0].space_name, "TEST room");
+    assert.equal(
+      store.passport(storageItem.id).locations[0].element_label,
+      "TEST cabinet",
+    );
+    const correctedLocation = execute(store, "save_memory", {
+      memory_id: modelLocation.id,
+      expected_revision: modelLocation.revision,
+      title: modelLocation.title,
+      content: "Inside the top drawer",
+      kind: "location",
+      source: "Test correction",
+    });
+    assert.equal(correctedLocation.space_id, spaceId);
+    assert.equal(correctedLocation.element_id, elementId);
+    assert.equal(correctedLocation.asset_id, storageItem.id);
+    assert.equal(correctedLocation.space_revision, 1);
+    assert.equal(correctedLocation.content, "Inside the top drawer");
+    const otherItemLocation = executeUiAction(store, "save_spatial_location", {
+      title: "TEST separate stored thing",
+      content: "Left drawer",
+      kind: "location",
+      source: "Test explicit selection",
+      asset_id: asset.id,
+      space_id: spaceId,
+      element_id: elementId,
+      space_revision: 1,
+      space_name: "TEST room",
+      element_label: "TEST cabinet",
+    });
+    assert.equal(otherItemLocation.asset_id, asset.id);
+    assert.equal(store.passport(asset.id).locations[0].element_label, "TEST cabinet");
+    assert.throws(
+      () => execute(store, "save_memory", { ...otherItemLocation, source: "Test" }),
+      /Unrecognized/,
+      "Agent memory writes cannot supply model anchors",
+    );
+    const spatialTaskInput = {
+      title: "TEST inspect cabinet",
+      kind: "task",
+      notes: "",
+      asset_id: storageItem.id,
+      due_on: "2025-01-01",
+      space_id: spaceId,
+      element_id: elementId,
+      space_revision: 1,
+    };
+    assert.throws(() => execute(store, "save_task", spatialTaskInput), /Unrecognized/);
+    assert.throws(
+      () => execute(store, "save_spatial_task", spatialTaskInput),
+      /Unknown tool/,
+    );
+    assert.throws(
+      () => executeUiAction(store, "save_spatial_task", {
+        ...spatialTaskInput, space_revision: 2,
+      }),
+      /model link changed/,
+      "A new pin needs the revision of the human-confirmed link",
+    );
+    assert.throws(
+      () => executeUiAction(store, "save_spatial_task", {
+        ...spatialTaskInput, asset_id: asset.id,
+      }),
+      /same HomeKeeper item/,
+    );
+    const spatialTask = executeUiAction(store, "save_spatial_task", spatialTaskInput);
+    assert.equal(spatialTask.space_id, spaceId);
+    assert.equal(
+      store.home().tasks.find((task) => task.id === spatialTask.id).element_label,
+      "TEST cabinet",
+    );
+    const spatialPlanInput = {
+      asset_id: storageItem.id,
+      title: "TEST clean cabinet",
+      due_on: "2025-01-02",
+      interval_days: 30,
+      source: "TEST user-provided schedule",
+      space_id: spaceId,
+      element_id: elementId,
+      space_revision: 1,
+    };
+    assert.throws(
+      () => execute(store, "schedule_maintenance", spatialPlanInput),
+      /Unrecognized/,
+    );
+    assert.throws(
+      () => execute(store, "schedule_spatial_maintenance", spatialPlanInput),
+      /Unknown tool/,
+    );
+    assert.throws(
+      () => executeUiAction(store, "schedule_spatial_maintenance", {
+        ...spatialPlanInput, space_revision: 2,
+      }),
+      /model link changed/,
+    );
+    const spatialPlan = executeUiAction(store, "schedule_spatial_maintenance", spatialPlanInput);
+    executeUiAction(store, "link_space_object", {
+      ...linkInput, revision: 2, request_id: randomUUID(),
+    });
+    for (const [name, input] of [
+      ["save_spatial_task", spatialTaskInput],
+      ["schedule_spatial_maintenance", spatialPlanInput],
+    ]) {
+      assert.throws(
+        () => executeUiAction(store, name, input),
+        (error) => error.status === 409 && /model link changed/.test(error.message),
+        "The old revision cannot create new pins after link reconfirmation",
+      );
+    }
+    const editedSpatialTask = execute(store, "save_task", {
+      task_id: spatialTask.id,
+      expected_revision: spatialTask.revision,
+      title: "TEST revised cabinet task",
+      kind: spatialTask.kind,
+      notes: "TEST changed notes",
+      due_on: "2025-02-01",
+      status: "cancelled",
+    });
+    assert.equal(editedSpatialTask.space_id, spaceId);
+    assert.equal(editedSpatialTask.element_id, elementId);
+    assert.equal(editedSpatialTask.asset_id, storageItem.id);
+    assert.equal(editedSpatialTask.space_revision, 1);
+    assert.equal(editedSpatialTask.status, "cancelled");
+    const reopenedSpatialTask = execute(store, "save_task", {
+      task_id: spatialTask.id,
+      expected_revision: editedSpatialTask.revision,
+      title: editedSpatialTask.title,
+      kind: editedSpatialTask.kind,
+      notes: editedSpatialTask.notes,
+      due_on: editedSpatialTask.due_on,
+      status: "open",
+    });
+    assert.equal(reopenedSpatialTask.space_revision, 1);
+    assert.equal(reopenedSpatialTask.status, "open");
+    assert.throws(
+      () => executeUiAction(store, "save_spatial_task", {
+        ...spatialTaskInput,
+        task_id: spatialTask.id,
+        expected_revision: reopenedSpatialTask.revision,
+      }),
+      /model link changed/,
+      "Explicit re-pins still require the current link revision",
+    );
+    const repinnedSpatialTask = executeUiAction(store, "save_spatial_task", {
+      ...spatialTaskInput,
+      task_id: spatialTask.id,
+      expected_revision: reopenedSpatialTask.revision,
+      space_revision: 2,
+    });
+    assert.equal(repinnedSpatialTask.space_revision, 2);
+    const updatedSpatialPlan = execute(store, "update_maintenance", {
+      maintenance_id: spatialPlan.id,
+      expected_due_on: spatialPlan.due_on,
+      expected_revision: spatialPlan.revision,
+      title: "TEST revised cabinet maintenance",
+      due_on: "2025-02-02",
+      interval_days: spatialPlan.interval_days,
+      source: spatialPlan.source,
+    });
+    assert.equal(updatedSpatialPlan.space_id, spaceId);
+    assert.equal(updatedSpatialPlan.element_id, elementId);
+    assert.equal(updatedSpatialPlan.space_revision, 1);
+    const stoppedSpatialPlan = execute(store, "update_maintenance", {
+      maintenance_id: spatialPlan.id,
+      expected_due_on: updatedSpatialPlan.due_on,
+      expected_revision: updatedSpatialPlan.revision,
+      title: updatedSpatialPlan.title,
+      due_on: null,
+      interval_days: null,
+      source: updatedSpatialPlan.source,
+    });
+    assert.equal(stoppedSpatialPlan.space_id, spaceId);
+    assert.equal(stoppedSpatialPlan.element_id, elementId);
+    assert.equal(stoppedSpatialPlan.space_revision, 1);
+    assert.equal(stoppedSpatialPlan.due_on, null);
+    assert.throws(
+      () => execute(store, "update_maintenance", {
+        maintenance_id: spatialPlan.id,
+        expected_due_on: updatedSpatialPlan.due_on,
+        expected_revision: updatedSpatialPlan.revision,
+        title: updatedSpatialPlan.title,
+        due_on: updatedSpatialPlan.due_on,
+        interval_days: updatedSpatialPlan.interval_days,
+        source: updatedSpatialPlan.source,
+        space_id: spaceId,
+        element_id: elementId,
+        space_revision: 2,
+      }),
+      /Unrecognized/,
+      "Agent maintenance edits cannot set or replace a model anchor",
+    );
+    assert.equal(
+      store.passport(storageItem.id).maintenance[0].element_label,
+      "TEST cabinet",
+    );
     store.close();
     store = null;
     capability = createCapability({ path, token });
@@ -402,6 +643,16 @@ test("real lifecycle, persistence, HTTP boundaries, uploads and MCP", async () =
     assert.equal(discovery.tools.length, 15);
     assert.ok(discovery.tools.some((t) => t.name === "save_home_item"));
     assert.ok(!discovery.tools.some((t) => t.name === "save_appliance"));
+    assert.ok(!discovery.tools.some((t) => t.name === "link_space_object"));
+    assert.ok(!discovery.tools.some((t) => t.name === "save_spatial_location"));
+    for (const name of ["save_spatial_task", "schedule_spatial_maintenance"])
+      assert.ok(!discovery.tools.some((t) => t.name === name));
+    for (const name of ["save_task", "schedule_maintenance", "update_maintenance"]) {
+      const properties = discovery.tools.find((t) => t.name === name).inputSchema.properties;
+      for (const field of ["space_id", "element_id", "space_revision"])
+        assert.ok(!(field in properties));
+    }
+    assert.ok(!("space_id" in discovery.tools.find((t) => t.name === "save_memory").inputSchema.properties));
     assert.equal(
       discovery.tools.find((t) => t.name === "get_home").annotations
         .readOnlyHint,
@@ -637,10 +888,23 @@ test("real lifecycle, persistence, HTTP boundaries, uploads and MCP", async () =
         .pages[0].text.length,
       1000,
     );
+    let roomtraceRevision = 1;
+    let roomtraceStatus = 200;
+    let roomtraceRequests = 0;
+    roomtraceServer = createServer((req, res) => {
+      roomtraceRequests++;
+      assert.equal(req.headers.authorization, `Bearer ${token}`);
+      assert.equal(req.url, `/api/maps/${spaceId}/architecture`);
+      res.writeHead(roomtraceStatus, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ revision: roomtraceRevision, document: {} }));
+    });
+    roomtraceServer.listen(0, "127.0.0.1");
+    await once(roomtraceServer, "listening");
     const config = {
       path: join(directory, "chat.sqlite"),
       token,
       capabilityUrl,
+      roomtraceUrl: `http://127.0.0.1:${roomtraceServer.address().port}`,
       mcpUrl: `${capabilityUrl}/mcp`,
       hosts: ["localhost"],
       mcpTimeout: 900000,
@@ -658,6 +922,116 @@ test("real lifecycle, persistence, HTTP boundaries, uploads and MCP", async () =
     config.hosts.push(`127.0.0.1:${hostServer.address().port}`);
     const headers = { Host: "localhost" };
     assert.equal((await fetch(`${hostUrl}/api/home`, { headers })).status, 200);
+    const uiLink = await fetch(
+      `${hostUrl}/api/ui-actions/link_space_object`,
+      {
+        method: "POST",
+        headers: { ...headers, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          space_id: spaceId,
+          element_id: "cabinet_2",
+          asset_id: storageItem.id,
+          space_name: "TEST room",
+          element_label: "TEST second cabinet",
+          revision: 1,
+          request_id: randomUUID(),
+        }),
+      },
+    );
+    assert.equal(uiLink.status, 200);
+    assert.equal((await uiLink.json()).element_label, "TEST second cabinet");
+    const storageInput = {
+      title: "TEST keys in unlinked container",
+      content: "Second shelf, left side",
+      kind: "location",
+      source: "TEST human-selected item and container",
+      asset_id: asset.id,
+      space_id: spaceId,
+      element_id: "unlinked_shelf",
+      space_revision: 1,
+      space_name: "TEST source model",
+      element_label: "TEST unlinked shelf",
+      request_id: randomUUID(),
+    };
+    const saveLocation = () => fetch(`${hostUrl}/api/ui-actions/save_spatial_location`, {
+      method: "POST",
+      headers: { ...headers, "Content-Type": "application/json" },
+      body: JSON.stringify(storageInput),
+    });
+    const savedLocation = await saveLocation();
+    assert.equal(savedLocation.status, 200);
+    const savedLocationRecord = await savedLocation.json();
+    assert.equal((await (await saveLocation()).json()).id, savedLocationRecord.id);
+    const persistedLocation = capability.store.passport(asset.id).locations.find(
+      (location) => location.id === savedLocationRecord.id,
+    );
+    assert.equal(persistedLocation.content, "Second shelf, left side");
+    assert.equal(persistedLocation.element_label, "TEST unlinked shelf");
+    assert.equal(persistedLocation.linked_revision, 1);
+    const postSpatial = (name, input) => fetch(`${hostUrl}/api/ui-actions/${name}`, {
+      method: "POST",
+      headers: { ...headers, "Content-Type": "application/json" },
+      body: JSON.stringify({ ...input, request_id: randomUUID() }),
+    });
+    const livePins = [
+      ["link_space_object", { ...linkInput, element_id: "cabinet_2" }],
+      ["save_spatial_task", { ...spatialTaskInput, element_id: "cabinet_2" }],
+      ["schedule_spatial_maintenance", { ...spatialPlanInput, element_id: "cabinet_2" }],
+      ["save_spatial_location", storageInput],
+    ];
+    for (const [name, input] of livePins)
+      assert.equal((await postSpatial(name, input)).status, 200, name);
+    const beforeStalePins = JSON.stringify(capability.store.home());
+    roomtraceRevision = 2;
+    for (const [name, input] of livePins) {
+      assert.equal((await postSpatial(name, input)).status, 409, `Stale ${name}`);
+      assert.equal(JSON.stringify(capability.store.home()), beforeStalePins);
+    }
+    roomtraceRevision = 1;
+    for (const status of [404, 503]) {
+      roomtraceStatus = status;
+      for (const [name, input] of livePins) {
+        assert.equal((await postSpatial(name, input)).status, 409, `Unavailable ${name}`);
+        assert.equal(JSON.stringify(capability.store.home()), beforeStalePins);
+      }
+    }
+    roomtraceStatus = 200;
+    roomtraceRevision = null;
+    assert.equal((await postSpatial("save_spatial_task", livePins[1][1])).status, 409);
+    assert.equal(JSON.stringify(capability.store.home()), beforeStalePins);
+    const beforeInvalidId = roomtraceRequests;
+    assert.equal((await postSpatial("link_space_object", {
+      ...linkInput, space_id: "../unexpected",
+    })).status, 400);
+    assert.equal(roomtraceRequests, beforeInvalidId, "Validate map IDs before requesting RoomTrace");
+    assert.equal(JSON.stringify(capability.store.home()), beforeStalePins);
+    await new Promise((resolve) => roomtraceServer.close(resolve));
+    roomtraceServer = null;
+    for (const [name, input] of livePins) {
+      assert.equal((await postSpatial(name, input)).status, 409, `Offline ${name}`);
+      assert.equal(JSON.stringify(capability.store.home()), beforeStalePins);
+    }
+    const forbiddenAnchor = await fetch(`${hostUrl}/api/actions/save_memory`, {
+      method: "POST",
+      headers: { ...headers, "Content-Type": "application/json" },
+      body: JSON.stringify(storageInput),
+    });
+    assert.equal(forbiddenAnchor.status, 400);
+    const hiddenLocationTool = await fetch(`${hostUrl}/api/actions/save_spatial_location`, {
+      method: "POST",
+      headers: { ...headers, "Content-Type": "application/json" },
+      body: JSON.stringify(storageInput),
+    });
+    assert.equal(hiddenLocationTool.status, 404);
+    const hiddenLinkTool = await fetch(
+      `${hostUrl}/api/actions/link_space_object`,
+      {
+        method: "POST",
+        headers: { ...headers, "Content-Type": "application/json" },
+        body: JSON.stringify(linkInput),
+      },
+    );
+    assert.equal(hiddenLinkTool.status, 404);
     const reportPath = `/api/assets/${asset.id}/report`;
     assert.equal((await fetch(`${capabilityUrl}${reportPath}`)).status, 401);
     assert.equal(
@@ -725,9 +1099,165 @@ test("real lifecycle, persistence, HTTP boundaries, uploads and MCP", async () =
     if (hostServer) await new Promise((resolve) => hostServer.close(resolve));
     if (capabilityServer)
       await new Promise((resolve) => capabilityServer.close(resolve));
+    if (roomtraceServer)
+      await new Promise((resolve) => roomtraceServer.close(resolve));
     host?.agent.close();
     capability?.store.close();
     store?.close();
     rmSync(directory, { recursive: true, force: true });
   }
 });
+
+test("spatial ownership, revisions, anchor editing and invalid inputs", () => {
+  const directory = mkdtempSync(join(tmpdir(), "homekeeper-spatial-"));
+  const path = join(directory, "home.sqlite");
+  let store = openStore(path);
+  try {
+    const container = execute(store, "save_home_item", { name: "Cabinet", category: "Furniture" });
+    const stored = execute(store, "save_home_item", { name: "Keys", category: "Item" });
+    const link = {
+      space_id: "b".repeat(32), element_id: "cabinet_1",
+      space_name: "Capture", element_label: "Cabinet", revision: 2,
+      asset_id: container.id,
+    };
+    executeUiAction(store, "link_space_object", link);
+    for (const invalid of [
+      { space_id: "not-a-map" }, { element_id: "1bad" },
+      { element_id: "a".repeat(65) }, { revision: 0 },
+      { revision: 1.5 }, { asset_id: randomUUID() },
+    ]) {
+      assert.throws(() => executeUiAction(store, "link_space_object", { ...link, ...invalid }));
+    }
+    assert.throws(
+      () => executeUiAction(store, "link_space_object", { ...link, revision: 1 }),
+      /changed/,
+    );
+    const pin = { space_id: link.space_id, element_id: link.element_id, space_revision: 2 };
+    const taskInput = { title: "Clean cabinet", kind: "task", asset_id: container.id, ...pin };
+    const careInput = {
+      title: "Care", due_on: "2030-01-01", source: "User date",
+      asset_id: container.id, ...pin,
+    };
+    for (const [name, input] of [["save_spatial_task", taskInput], ["schedule_spatial_maintenance", careInput]]) {
+      for (const invalid of [
+        { asset_id: stored.id }, { asset_id: randomUUID() },
+        { space_revision: 1 }, { space_revision: 3 },
+        { element_id: "missing" }, { element_id: null },
+        { space_id: null }, { space_revision: undefined },
+      ]) assert.throws(() => executeUiAction(store, name, { ...input, ...invalid }));
+    }
+    const task = executeUiAction(store, "save_spatial_task", taskInput);
+    const editedTask = execute(store, "save_task", {
+      task_id: task.id, expected_revision: task.revision, title: "Wipe cabinet", kind: "task",
+    });
+    assert.equal(editedTask.asset_id, container.id);
+    assert.equal(editedTask.space_revision, 2);
+    const memoryInput = {
+      title: "Keys location", content: "Top drawer, behind tray", kind: "location",
+      source: "User selection", asset_id: stored.id, ...pin,
+      space_name: link.space_name, element_label: link.element_label,
+    };
+    for (const invalid of [
+      { asset_id: randomUUID() }, { asset_id: null }, { kind: "fact" },
+      { space_id: null }, { element_id: null }, { space_revision: null },
+      { space_name: undefined }, { element_label: undefined },
+    ]) assert.throws(() => executeUiAction(store, "save_spatial_location", { ...memoryInput, ...invalid }));
+    const memory = executeUiAction(store, "save_spatial_location", memoryInput);
+    assert.equal(store.passport(stored.id).locations[0].asset_id, stored.id);
+    executeUiAction(store, "link_space_object", { ...link, revision: 3, element_label: "Renamed cabinet" });
+    assert.equal(store.passport(stored.id).locations[0].element_label, "Cabinet");
+    assert.equal(store.passport(stored.id).locations[0].linked_revision, 2);
+    assert.equal(store.home().tasks.find((row) => row.id === task.id).linked_revision, 2);
+    const edit = {
+      memory_id: memory.id, expected_revision: memory.revision,
+      title: memory.title, content: "Bottom drawer", kind: "location", source: "User correction",
+    };
+    for (const invalid of [
+      { asset_id: container.id }, { asset_id: null }, { kind: "fact" },
+      { space_id: link.space_id }, { space_id: null, element_id: null },
+    ]) assert.throws(() => execute(store, "save_memory", { ...edit, ...invalid }));
+    const corrected = execute(store, "save_memory", edit);
+    assert.equal(corrected.asset_id, stored.id);
+    assert.equal(corrected.element_id, link.element_id);
+    assert.equal(corrected.space_revision, 2);
+    store.close();
+    store = openStore(path);
+    assert.equal(store.passport(stored.id).locations[0].content, "Bottom drawer");
+    assert.equal(store.passport(stored.id).locations[0].element_label, "Cabinet");
+    const cleared = executeUiAction(store, "save_spatial_location", {
+      ...edit, expected_revision: corrected.revision, space_id: null, element_id: null,
+    });
+    assert.equal(cleared.asset_id, stored.id);
+    for (const field of ["space_id", "element_id", "space_name", "element_label", "space_revision"])
+      assert.equal(cleared[field], null);
+  } finally {
+    store.close();
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+for (const hasAnchors of [false, true]) {
+test(`existing SQLite schema (${hasAnchors ? "legacy anchors" : "pre-spatial"}) migrates without data loss`, () => {
+  const directory = mkdtempSync(join(tmpdir(), "homekeeper-migration-"));
+  const path = join(directory, "home.sqlite");
+  const assetId = randomUUID(), memoryId = randomUUID(), planId = randomUUID(), taskId = randomUUID();
+  const spaceId = "c".repeat(32);
+  let legacy = new DatabaseSync(path), store;
+  try {
+    legacy.exec(`
+      CREATE TABLE assets (id TEXT PRIMARY KEY,name TEXT NOT NULL,room TEXT NOT NULL,category TEXT NOT NULL,
+        brand TEXT NOT NULL,model TEXT NOT NULL,serial TEXT NOT NULL,purchased_on TEXT,warranty_until TEXT,
+        notes TEXT NOT NULL,created_at TEXT NOT NULL);
+      CREATE TABLE maintenance (id TEXT PRIMARY KEY,asset_id TEXT NOT NULL REFERENCES assets(id),
+        title TEXT NOT NULL,due_on TEXT,interval_days INTEGER,source TEXT NOT NULL,last_completed_on TEXT);
+      CREATE TABLE memories (id TEXT PRIMARY KEY,title TEXT NOT NULL,content TEXT NOT NULL,kind TEXT NOT NULL,
+        asset_id TEXT REFERENCES assets(id),source TEXT NOT NULL,revision INTEGER NOT NULL,
+        updated_at TEXT NOT NULL${hasAnchors ? ",space_id TEXT,element_id TEXT" : ""});
+      CREATE TABLE space_objects (space_id TEXT NOT NULL,element_id TEXT NOT NULL,
+        asset_id TEXT NOT NULL REFERENCES assets(id),space_name TEXT NOT NULL,element_label TEXT NOT NULL,
+        PRIMARY KEY(space_id,element_id));
+      CREATE TABLE tasks (id TEXT PRIMARY KEY,title TEXT NOT NULL,kind TEXT NOT NULL,notes TEXT NOT NULL,
+        asset_id TEXT REFERENCES assets(id),due_on TEXT,interval_days INTEGER,status TEXT NOT NULL,
+        last_completed_on TEXT,revision INTEGER NOT NULL,created_at TEXT NOT NULL);
+    `);
+    legacy.prepare("INSERT INTO assets VALUES (?,?,?,'Item','','','',NULL,NULL,'','2025-01-01')").run(assetId, "Legacy keys", "Room");
+    legacy.prepare("INSERT INTO maintenance VALUES (?,?,?,'2030-01-01',30,'User schedule',NULL)").run(planId, assetId, "Legacy care");
+    legacy.prepare("INSERT INTO tasks VALUES (?,?,?,'',?,'2030-01-01',NULL,'open',NULL,2,'2025-01-01')").run(taskId, "Legacy task", "task", assetId);
+    legacy.prepare("INSERT INTO space_objects VALUES (?,'cabinet',?,'Legacy capture','Legacy cabinet')").run(spaceId, assetId);
+    if (hasAnchors)
+      legacy.prepare("INSERT INTO memories VALUES (?,?,'Shelf 2','location',?,'User',4,'2025-01-01',?,'cabinet')").run(memoryId, "Legacy location", assetId, spaceId);
+    else
+      legacy.prepare("INSERT INTO memories VALUES (?,?,'Shelf 2','location',?,'User',4,'2025-01-01')").run(memoryId, "Legacy location", assetId);
+    legacy.close();
+    legacy = null;
+    store = openStore(path);
+    assert.equal(store.passport(assetId).name, "Legacy keys");
+    const memory = store.passport(assetId).locations[0];
+    assert.equal(memory.id, memoryId);
+    assert.equal(memory.content, "Shelf 2");
+    assert.equal(memory.revision, 4);
+    assert.equal(memory.space_name, hasAnchors ? "Legacy capture" : null);
+    assert.equal(memory.element_label, hasAnchors ? "Legacy cabinet" : null);
+    assert.equal(memory.linked_revision, hasAnchors ? 1 : null);
+    assert.equal(store.passport(assetId).maintenance[0].id, planId);
+    assert.equal(store.passport(assetId).maintenance[0].revision, 1);
+    assert.equal(store.home().tasks[0].id, taskId);
+    assert.equal(store.home().tasks[0].revision, 2);
+    assert.equal(store.home().tasks[0].space_id, null);
+    const corrected = execute(store, "save_memory", {
+      memory_id: memoryId, expected_revision: 4, title: memory.title,
+      kind: "location", content: "Shelf 3", source: "User correction",
+    });
+    assert.equal(corrected.asset_id, assetId);
+    assert.equal(corrected.space_id, hasAnchors ? spaceId : null);
+    store.close();
+    store = openStore(path);
+    assert.equal(store.passport(assetId).locations[0].content, "Shelf 3");
+    assert.equal(store.passport(assetId).locations[0].linked_revision, hasAnchors ? 1 : null);
+  } finally {
+    legacy?.close();
+    store?.close();
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+}

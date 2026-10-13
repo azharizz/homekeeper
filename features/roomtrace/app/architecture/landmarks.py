@@ -10,7 +10,6 @@ from PIL import Image
 
 from .. import store
 from . import Architecture
-from .alignment import fit_photos
 
 
 def guidance(directory):
@@ -18,11 +17,8 @@ def guidance(directory):
     return json.loads(path.read_text()) if path.is_file() else None
 
 
-def build_landmarks(job, max_error_px=4.0):
-    directory = store.artifact_dir(job)
-    scene = json.loads((directory / "scene.json").read_text())
+def _write_landmarks(job, directory, scene, fits, max_error_px):
     document = Architecture.model_validate(scene["architecture"])
-    fits = fit_photos(document, scene["frames"])
     observations = {}
     for fit in fits:
         for m in fit["matches"]:
@@ -135,6 +131,8 @@ def build_landmarks(job, max_error_px=4.0):
         "max_source_error_px": max_error_px,
         "landmarks": evidence,
         "levels": scene["architecture"]["levels"],
+        "cameras": scene.get("cameras", []),
+        "validation": scene["guide_readiness"]["validation"],
         "geometry": {
             key: {
                 "bounds": c["bounds"],
@@ -173,4 +171,62 @@ def build_landmarks(job, max_error_px=4.0):
         "limits": "Observed landmarks attached to estimated geometry. Map-relative pose is not surveyed physical position; plan hulls are not walking clearance. No detailed mesh is needed to localize.",
     }
     store.atomic_json(directory / "guidance.json", result)
+    return result
+
+
+def calibrate_scene(job, directory, scene, fits, failures, max_error_px=4.0):
+    """Prepare revision-owned evidence before publication, without certifying navigation."""
+    checks = [
+        {
+            "source": fit["source"],
+            "check_count": fit["check_count"],
+            "rmse_px": fit["check_rmse_px"],
+            "max_error_px": fit["check_max_error_px"],
+        }
+        for fit in fits
+        if fit["check_count"]
+    ]
+    worst = max((row["max_error_px"] for row in checks), default=None)
+    validation = {
+        "status": "missing" if worst is None else "passed" if worst <= max_error_px else "failed",
+        "check_count": sum(row["check_count"] for row in checks),
+        "max_error_px": worst,
+        "threshold_px": max_error_px,
+        "sources": checks,
+        "limits": "Held-out declared check points test projection only, not live localization or physical accuracy.",
+    }
+    reasons = [f"{item['source']}: {item['reason']}" for item in failures]
+    if not fits:
+        reasons.append("No fitted source cameras. Supply observed photo-to-model correspondences and exact lens calibration.")
+    uncalibrated = [fit["source"] for fit in fits if not fit["calibration_supplied"]]
+    if uncalibrated:
+        reasons.append("Exact source lens calibration is missing for: " + ", ".join(uncalibrated))
+    if validation["status"] == "failed":
+        reasons.append("Held-out projection checks exceed the selected pixel error threshold.")
+    readiness = {
+        "status": "needs_calibration",
+        "ready": False,
+        "reasons": reasons,
+        "revision": scene["revision"],
+        "artifact_revision": scene["artifact_revision"],
+        "landmark_count": 0,
+        "camera_count": sum(fit["calibration_supplied"] for fit in fits),
+        "max_source_error_px": max_error_px,
+        "validation": validation,
+        "units": "estimated_metres",
+        "physically_verified": False,
+        "limits": "Ready means a revision-owned visual localization index exists; it does not mean verified scale, live pose, obstacle clearance or safe walking.",
+    }
+    scene["guide_readiness"] = readiness
+    scene["localizable"] = False
+    scene["landmark_count"] = 0
+    result = None
+    if not reasons:
+        try:
+            result = _write_landmarks(job, directory, scene, fits, max_error_px)
+        except (ValueError, OSError, cv2.error) as error:
+            reasons.append(str(error))
+    if result is not None:
+        readiness.update(status="ready", ready=True, landmark_count=result["landmark_count"])
+        scene.update(localizable=True, landmark_count=result["landmark_count"])
     return result

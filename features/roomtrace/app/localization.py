@@ -103,12 +103,14 @@ def localize(job_id: str, path: Path, calibration=None, captured_at=None):
         from .architecture.landmarks import guidance
 
         index = guidance(store.artifact_dir(job))
-        scene = {
-            "mode": "architecture",
-            "revision": job["revision"],
-            "artifact_revision": job["artifact_revision"],
-            "display_from_world": np.eye(4).tolist(),
-        }
+        scene = json.loads((store.artifact_dir(job) / "scene.json").read_text())
+        if index and (
+            index.get("revision") != job["revision"]
+            or index.get("artifact_revision") != job["artifact_revision"]
+            or not (store.artifact_dir(job) / index["index_file"]).is_file()
+            or scene.get("guide_readiness", {}).get("ready") is False
+        ):
+            index = None
     else:
         scene = json.loads((store.artifact_dir(job) / "scene.json").read_text())
     base = {
@@ -141,7 +143,8 @@ def localize(job_id: str, path: Path, calibration=None, captured_at=None):
     if not (index if structured else scene["localizable"]):
         return finish(
             reason=(
-                "Position unknown. This architectural draft has no calibrated image-to-map landmarks. The observation is retained for Codex review."
+                " ".join(scene.get("guide_readiness", {}).get("reasons", []))
+                or "Position unknown. This architectural draft has no revision-owned calibrated image-to-map landmarks. The observation is retained for Codex review."
                 if scene["mode"] == "architecture"
                 else "A single inferred surface is not a multi-view localization map."
             )

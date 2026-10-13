@@ -79,11 +79,13 @@ def move_object(document, placement):
     return Architecture.model_validate(result)
 
 
-def publish(job: dict, document: Architecture, expected_revision: int):
+def publish(job: dict, document: Architecture, expected_revision: int, *, max_error_px=4.0):
     from .alignment import fit_photos
     from .checks import inspect_geometry
     from .evidence import measurement_checks
     from .features import feature_catalog, dimension_report
+    from .landmarks import calibrate_scene
+    from .schema import PhotoCalibration
 
     directory = store.job_dir(job["id"])
     frames = json.loads((directory / "frames.json").read_text())
@@ -99,7 +101,25 @@ def publish(job: dict, document: Architecture, expected_revision: int):
     components = component_meshes(document, mesh)
     levels = {item.id: item for item in document.levels}
     elements = {item.id: item for item in document.elements}
-    alignments = fit_photos(document, frames)
+    calibration_failures = []
+    alignments = fit_photos(
+        document, frames, job["options"].get("calibration"),
+        failures=calibration_failures,
+    )
+    # Persist genuine resized capture intrinsics so refinement/overlays reuse the same lens.
+    fitted = {fit["source"]: fit for fit in alignments if fit["calibration_supplied"]}
+    calibrated = []
+    for alignment in document.alignments:
+        fit = fitted.get(alignment.source)
+        if alignment.calibration is None and fit:
+            alignment = alignment.model_copy(update={"calibration": PhotoCalibration(
+                width=fit["size"][0], height=fit["size"][1],
+                fx=fit["intrinsic"][0][0], fy=fit["intrinsic"][1][1],
+                cx=fit["intrinsic"][0][2], cy=fit["intrinsic"][1][2],
+                distortion=fit["distortion"], provenance=fit["calibration_source"],
+            )})
+        calibrated.append(alignment)
+    document = document.model_copy(update={"alignments": calibrated})
     checks = inspect_geometry(document, components)
     measurements = measurement_checks(document)
     revision_id = uuid4().hex
@@ -162,8 +182,28 @@ def publish(job: dict, document: Architecture, expected_revision: int):
             "localizable": False,
             "points": [],
             "colors": [],
-            "cameras": [],
+            "cameras": [
+                {
+                    "id": fit["source"],
+                    "name": fit["source"],
+                    "position": np.array(fit["camera_to_world"])[:3, 3].tolist(),
+                    "display_position": np.array(fit["camera_to_world"])[:3, 3].tolist(),
+                    "world_to_camera": fit["world_to_camera"][:3],
+                    "camera_model": "PINHOLE",
+                    "width": fit["size"][0],
+                    "height": fit["size"][1],
+                    "params": [
+                        fit["intrinsic"][0][0], fit["intrinsic"][1][1],
+                        fit["intrinsic"][0][2], fit["intrinsic"][1][2],
+                    ],
+                    "distortion": fit["distortion"],
+                    "calibration_source": fit["calibration_source"],
+                }
+                for fit in alignments
+                if fit["calibration_supplied"]
+            ],
             "photo_alignments": alignments,
+            "calibration_failures": calibration_failures,
             "geometry_checks": checks,
             "measurement_checks": measurements,
             "features": feature_catalog(document),
@@ -177,6 +217,11 @@ def publish(job: dict, document: Architecture, expected_revision: int):
             ),
             "total_frames": len(frames),
         }
+        compact = calibrate_scene(
+            job, target, scene, alignments, calibration_failures, max_error_px
+        )
+        if compact:
+            scene["artifacts"].extend(["guidance.json", compact["index_file"]])
         store.atomic_json(target / "scene.json", scene)
         return store.publish_revision(
             job["id"],
@@ -186,6 +231,7 @@ def publish(job: dict, document: Architecture, expected_revision: int):
                 "mode": "architecture",
                 "total_frames": len(frames),
                 "surface_triangles": scene["surface_triangles"],
+                "guide_readiness": scene["guide_readiness"],
             },
         )
     except (OSError, ValueError):

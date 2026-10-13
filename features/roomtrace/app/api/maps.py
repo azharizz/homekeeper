@@ -187,13 +187,38 @@ def scene(job_id: str):
     compact = (
         guidance(store.artifact_dir(job)) if value["mode"] == "architecture" else None
     )
-    return value | {
-        "scale": job.get("scale"),
-        "localizable": bool(compact)
-        if value["mode"] == "architecture"
-        else value["localizable"],
-        "landmark_count": compact["landmark_count"] if compact else 0,
-    }
+    if value["mode"] == "architecture":
+        indexed = bool(
+            compact
+            and compact.get("revision") == value.get("revision")
+            and compact.get("artifact_revision") == value.get("artifact_revision")
+            and (store.artifact_dir(job) / compact["index_file"]).is_file()
+        )
+        readiness = value.get("guide_readiness") or {
+            "status": "ready" if indexed else "needs_calibration",
+            "ready": indexed,
+            "reasons": [] if indexed else ["This revision has no observed localization index. Supply source correspondences and exact lens calibration, then republish."],
+            "revision": value.get("revision"),
+            "artifact_revision": value.get("artifact_revision"),
+            "landmark_count": compact["landmark_count"] if indexed else 0,
+            "camera_count": len(value.get("cameras", [])),
+            "validation": {"status": "missing", "check_count": 0},
+            "units": "estimated_metres",
+            "physically_verified": False,
+        }
+        if readiness["ready"] and not indexed:
+            readiness = readiness | {
+                "status": "needs_calibration", "ready": False,
+                "landmark_count": 0,
+                "reasons": ["The revision-owned localization index is missing or stale. Republish to rebuild it."],
+            }
+        return value | {
+            "scale": job.get("scale"),
+            "localizable": indexed and readiness["ready"],
+            "landmark_count": compact["landmark_count"] if indexed else 0,
+            "guide_readiness": readiness,
+        }
+    return value | {"scale": job.get("scale"), "landmark_count": 0}
 
 
 @router.get("/api/maps/{job_id}/artifacts/{filename}")

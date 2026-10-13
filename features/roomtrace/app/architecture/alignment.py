@@ -6,6 +6,7 @@ import cv2
 import numpy as np
 
 from .features import resolve_anchor
+from .schema import PhotoCalibration
 
 
 def world_points(document, matches):
@@ -55,6 +56,7 @@ def projection_report(document, alignment, size, rotation, translation):
         "calibration_source": alignment.calibration.provenance
         if alignment.calibration
         else "Estimated centered pinhole lens",
+        "calibration_supplied": alignment.calibration is not None,
         "camera_to_world": (
             np.linalg.inv(world_to_camera) @ np.diag([1, -1, -1, 1])
         ).tolist(),
@@ -125,7 +127,7 @@ def fit_photo(document, alignment, size):
     return projection_report(document, alignment, size, rotation, translation)
 
 
-def fit_photos(document, frames):
+def fit_photos(document, frames, calibration=None, *, failures=None):
     sources = {frame["name"]: frame for frame in frames}
     output = []
     for alignment in document.alignments:
@@ -133,5 +135,39 @@ def fit_photos(document, frames):
             raise ValueError(
                 "Photo alignment references an image outside this capture."
             )
-        output.append(fit_photo(document, alignment, sources[alignment.source]["size"]))
+        try:
+            if alignment.calibration is None and calibration:
+                model, params = calibration["model"], calibration["params"]
+                if model == "PINHOLE":
+                    fx, fy, cx, cy = params
+                    distortion = [0] * 5
+                elif model in {"SIMPLE_PINHOLE", "SIMPLE_RADIAL", "RADIAL"}:
+                    fx, cx, cy, *radial = params
+                    fy = fx
+                    distortion = [*radial, *([0] * (5 - len(radial)))]
+                elif model == "OPENCV":
+                    fx, fy, cx, cy, *distortion = params
+                    distortion = [*distortion, 0]
+                else:
+                    raise ValueError(
+                        f"Capture lens {model} is not supported by architectural OpenCV fitting. Supply exact per-photo calibration."
+                    )
+                alignment = alignment.model_copy(
+                    update={
+                        "calibration": PhotoCalibration(
+                            width=calibration["width"],
+                            height=calibration["height"],
+                            fx=fx, fy=fy, cx=cx, cy=cy,
+                            distortion=distortion,
+                            provenance=f"Supplied capture calibration ({model}); resized to source image.",
+                        )
+                    }
+                )
+            output.append(
+                fit_photo(document, alignment, sources[alignment.source]["size"])
+            )
+        except ValueError as error:
+            if failures is None:
+                raise
+            failures.append({"source": alignment.source, "reason": str(error)})
     return output

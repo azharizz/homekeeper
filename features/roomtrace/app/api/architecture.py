@@ -25,7 +25,7 @@ from ..architecture import (
 from ..architecture.alignment import fit_photos
 from ..architecture.checks import inspect_geometry
 from ..architecture.evidence import accuracy_report
-from ..architecture.landmarks import build_landmarks, guidance
+from ..architecture.landmarks import guidance
 from ..architecture.refinement import (
     RefinementRequest,
     ScaleProposal,
@@ -320,14 +320,26 @@ class LandmarkRequest(BaseModel):
 @router.post("/api/maps/{job_id}/architecture/landmarks")
 def create_architecture_landmarks(job_id: str, body: LandmarkRequest):
     job = require_job(job_id, ready=True)
-    revision_document(job_id, body.expected_revision)
     if job["revision"] != body.expected_revision:
         raise HTTPException(409, "Revision changed. Read the current model.")
+    document = revision_document(job_id, body.expected_revision)
     try:
-        result = build_landmarks(job, body.max_error_px)
+        updated = publish(
+            job, document, body.expected_revision, max_error_px=body.max_error_px
+        )
     except ValueError as error:
-        raise HTTPException(422, str(error)) from error
-    return {k: v for k, v in result.items() if k not in {"geometry", "landmarks"}}
+        raise HTTPException(
+            409 if str(error).startswith("Revision conflict") else 422, str(error)
+        ) from error
+    directory = store.artifact_dir(updated)
+    scene = json.loads((directory / "scene.json").read_text())
+    result = guidance(directory) or {
+        "revision": updated["revision"],
+        "artifact_revision": updated["artifact_revision"],
+    }
+    return {
+        k: v for k, v in result.items() if k not in {"geometry", "landmarks"}
+    } | {"guide_readiness": scene["guide_readiness"]}
 
 
 @router.get("/api/maps/{job_id}/architecture/guidance")
@@ -335,7 +347,11 @@ def architecture_guidance(job_id: str):
     job = require_job(job_id, ready=True)
     value = guidance(store.artifact_dir(job))
     if value is None:
-        raise HTTPException(409, "Build observed landmarks for this revision first.")
+        scene = json.loads((store.artifact_dir(job) / "scene.json").read_text())
+        reasons = scene.get("guide_readiness", {}).get("reasons", [])
+        raise HTTPException(
+            409, " ".join(reasons) or "This revision needs observed landmarks and exact source lens calibration."
+        )
     return value
 
 
@@ -351,7 +367,10 @@ def architecture_overlay(job_id: str, body: OverlayRequest):
     current = revision_document(job_id, body.expected_revision)
     frames = json.loads((store.job_dir(job_id) / "frames.json").read_text())
     try:
-        fits = fit_photos(body.document or current, frames)
+        fits = fit_photos(
+            body.document or current, frames,
+            require_job(job_id)["options"].get("calibration"),
+        )
         fit = next((f for f in fits if f["source"] == body.source), None)
         if fit is None:
             raise ValueError("Select a source image with declared alignment landmarks.")
@@ -396,7 +415,9 @@ def align_architecture_photo(job_id: str, body: AlignmentRequest):
     try:
         document = Architecture.model_validate(updated)
         frames = json.loads((store.job_dir(job_id) / "frames.json").read_text())
-        fits = fit_photos(document, frames)
+        fits = fit_photos(
+            document, frames, require_job(job_id)["options"].get("calibration")
+        )
     except ValueError as error:
         raise HTTPException(422, str(error)) from error
     result = next(fit for fit in fits if fit["source"] == body.alignment.source)

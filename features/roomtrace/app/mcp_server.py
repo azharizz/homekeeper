@@ -413,7 +413,7 @@ def architecture_photo_overlay(
 def build_architecture_landmarks(
     map_id: str, expected_revision: int, max_error_px: float = 4.0
 ) -> dict:
-    """Build compact image descriptors at agent-declared fit landmarks. Requires eight shared landmarks in at least two photos with depth variation. Checks never enter the index. max_error_px is an explicit source projection acceptance threshold, not a physical uncertainty estimate. New publications require rebuilding. Does not certify live navigation."""
+    """Rebuild compact descriptors in a newly published atomic revision; use the returned revision for subsequent edits. Normal architecture publication already builds automatically. Requires supplied source lens calibration and eight shared observed fit landmarks in two photos with depth variation. Checks never train the index; failed held-out checks block readiness and missing checks remain explicit. Insufficient evidence returns guide_readiness needs_calibration without losing the model. max_error_px is a source projection threshold, not physical uncertainty. Does not certify live navigation."""
     return response(
         "POST",
         f"maps/{quote(map_id, safe='')}/architecture/landmarks",

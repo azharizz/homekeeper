@@ -21,7 +21,7 @@ from app.architecture.refinement import (
     propose_scale,
     scale_document,
 )
-from app.architecture.landmarks import build_landmarks
+from app.architecture.landmarks import guidance
 from app.main import app
 
 
@@ -346,7 +346,7 @@ def landmark_localization():
                 )
             store.atomic_json(root / "frames.json", frames)
             job = publish(job, model, 0)
-            index = build_landmarks(job)
+            index = guidance(store.artifact_dir(job))
             assert index["landmark_count"] >= 20, index["landmark_count"]
             assert len(index["source_images"]) == 2
             assert all(len(p["sha256"]) == 64 for p in index["source_images"])
@@ -370,10 +370,13 @@ def landmark_localization():
             ), result
             Image.new("RGB", (800, 600), "white").save(path)
             assert localize(job["id"], path, calibration)["status"] == "lost"
-            publish(job, model, 1)
+            previous = store.artifact_dir(job)
+            job = publish(job, model, 1)
+            assert guidance(store.artifact_dir(job))["revision"] == 2
+            assert guidance(previous)["revision"] == 1
             assert localize(job["id"], path, calibration)["status"] == "lost"
             print(
-                f"PASS: actual SIFT index ({index['index_bytes']} bytes), rotated-image geometric pose, blank-frame loss and revision isolation"
+                f"PASS: automatic SIFT index ({index['index_bytes']} bytes), rotated-image geometric pose, blank-frame loss and revision-owned rebuild"
             )
         finally:
             load_index.cache_clear()

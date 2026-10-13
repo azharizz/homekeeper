@@ -1,0 +1,32 @@
+body:has(.voice-guide) { min-width: 0; background: #081c26; }
+.voice-guide { min-height: 100dvh; max-width: 600px; margin: auto; padding: 24px 24px 32px; display: flex; flex-direction: column; align-items: center; color: #effaff; background: #081c26; text-align: center; }
+.guide-home { align-self: flex-start; color: #a8e9fc; padding: 12px 0; }
+.voice-orb { width: 150px; height: 150px; border-radius: 50%; margin: 9vh auto 32px; border: 4px solid #75deff; box-shadow: 0 0 48px #219bc24d, inset 0 0 35px #147f9f70; background: radial-gradient(circle at 35% 30%, #20566d, #0b2636); flex-shrink: 0; }
+.voice-orb.listening { border-color: #b8ffcf; box-shadow: 0 0 55px #5ee79870; }
+.voice-orb.thinking, .voice-orb.matching { border-color: #ffdf9c; }
+.voice-caption { font-size: 22px; line-height: 1.5; max-width: 32ch; max-height: min(25dvh, 8rem); overflow-y: auto; margin: 0 0 32px; }
+.voice-actions { display: flex; gap: 20px; width: 100%; margin-top: auto; }
+.voice-actions button { flex: 1; min-height: 108px; border-radius: 28px; border: 2px solid #81dfff; background: #b8efff; color: #08212e; font: inherit; font-size: 22px; font-weight: 600; cursor: pointer; }
+.voice-actions button:nth-child(2) { background: #163846; color: #e0f7ff; }
+.voice-actions span { display: block; font-size: 28px; }
+.voice-guide :focus-visible { outline: 4px solid #ffdb84; outline-offset: 5px; }
+.guide-camera-preview { width: 100%; }
+.voice-guide video { width: 100%; max-height: 28vh; border-radius: 24px; object-fit: contain; background: #06151d; margin-top: 12px; }
+.guide-camera-preview:has(video:not([hidden])) + .voice-orb { width: 72px; height: 72px; margin: 20px auto; }
+.voice-footnote { font-size: 13px; color: #becfd6; margin: 22px 0 8px; }
+.voice-privacy { font-size: 13px; color: #becfd6; max-width: 45ch; }
+.voice-privacy summary { padding: 12px; cursor: pointer; }
+.voice-privacy p { line-height: 1.6; }
+.voice-guide-debug { max-width: 1440px; gap: 16px; }
+.voice-guide-debug .voice-orb { width: 56px; height: 56px; margin: 8px auto; }
+.voice-guide-debug .voice-caption { font-size: 18px; max-width: 60ch; margin-bottom: 8px; }
+.voice-guide-debug .voice-actions { max-width: 600px; }
+.voice-guide-debug video { max-height: 35vh; width: min(100%, 640px); }
+.guide-debug-selection { display: flex; flex-wrap: wrap; gap: 16px; width: 100%; text-align: left; }
+.guide-debug-selection label { display: grid; gap: 8px; flex: 1; min-width: 240px; }
+.guide-debug-selection select { width: 100%; min-height: 44px; padding: 8px; color: inherit; background: #163846; border: 1px solid #81dfff; border-radius: 8px; }
+.voice-privacy button { min-height: 44px; padding: 8px 16px; border-radius: 8px; }
+.guide-demo-badge { padding: 5px 10px; border: 1px solid #ffdf9c; border-radius: 999px; color: #ffdf9c; font-size: 12px; }
+.guide-demo-link { margin: 10px 0; font-size: 13px; line-height: 1.5; color: #becfd6; }
+.guide-demo-link a, .voice-privacy a { color: #a8e9fc; }
+.voice-actions button:disabled { opacity: 0.5; cursor: wait; }

@@ -300,6 +300,10 @@ export function App({ initial }) {
             <span className="tooltip">{label}</span>
           </button>
         ))}
+        <a className="rail-button" href="/?view=guide" aria-label="Home Guide">
+          <Icon name="mic" />
+          <span className="tooltip">Home Guide</span>
+        </a>
       </nav>
       {error && (
         <div className="global-error error" role="alert">

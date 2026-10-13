@@ -40,6 +40,10 @@ When moving an existing RoomTrace registration, update both paths and restart th
 
 Copy the modeling request from a capture into Codex. The real agent inspects the capture and source images, authors geometry/assets/materials and publishes with the current revision. The web page updates from the stored result. Captures and files supplied directly to MCP must live inside this feature directory. Authoring does not route through HomeKeeper's conversational Nebius agent.
 
+Architecture publication automatically fits declared observed photo-to-model landmarks and prepares the existing compact SIFT localization index inside the new revision before the atomic publication switch. It reuses exact per-photo lens calibration or supported supplied capture calibration; it does not invent camera poses or annotations from raw photos. At least eight shared fit landmarks in two source photos with depth variation and usable descriptors are required. Missing calibration, insufficient observations, failed camera fitting or failed held-out projection checks leave the model published with explicit `needs_calibration` reasons, not fake readiness.
+
+The scene API persists `guide_readiness`: `status` (`ready` or `needs_calibration`), `ready`, `reasons`, `revision`, `artifact_revision`, `landmark_count`, `camera_count`, and `validation`. Validation is `passed`, `failed`, or `missing`: declared check points are excluded from camera fitting and index training; missing checks are reported separately from index readiness. `localizable` means an actual revision-owned index exists, not that a live frame is localized. Units remain estimated metres and `physically_verified` is false; readiness never certifies scale, clearance or safe walking. The explicit landmark rebuild endpoint publishes a fresh revision and returns its readiness; use that returned revision for subsequent edits. Older revisions, including saved demo data, are never rewritten automatically.
+
 ## Checks
 
 From HomeKeeper:
@@ -54,5 +58,7 @@ npm run check:roomtrace
 `check:roomtrace` starts real isolated services, checks gateway security and uploads, then inspects the integrated workspace in a browser. When local saved architecture exists it copies one capture and the asset library into temporary test storage, uploads those same photographs as a new capture and runs the actual MCP tool check. That check inspects the photos and asset evidence, previews source-linked materials, republishes the existing agent-authored document, and rejects a stale revision. The new model is rendered and downloaded through HomeKeeper. This is an integration replay, not newly inferred geometry or evidence of another room's accuracy. It does not edit the user's home. Without a saved capture, model-specific checks are reported as skipped.
 
 Existing Python checks run from this directory, for example `python tests/check_structure.py` and `python tests/check_walkthrough.py`. `tests/check_mcp.py` expects HomeKeeper to be running. JavaScript geometry checks use `node tests/check_camera.mjs` and `node tests/check_walkthrough.mjs`.
+
+`python tests/check_automatic_calibration.py` runs the focused publication/calibration mock check in temporary storage with Aria-shaped frame names and synthetic correspondences; it never reads or changes a saved Space or demo media and does not start an HTTP service.
 
 Measurements and steps remain estimates unless genuine physical evidence supports them. The model walkthrough is not live phone positioning or a verified walking aid. Preserve [third-party notices](THIRD_PARTY_NOTICES.md) when redistributing the feature.

@@ -20,6 +20,7 @@ services:
       PORT: ${LOCAL_HOST_PORT:-8789}
       HOMEKEEPER_TOKEN: ${HOMEKEEPER_TOKEN:?Run npm run setup first}
       NEBIUS_MODEL: ${NEBIUS_MODEL:-}
+      NEBIUS_VISION_MODEL: ${NEBIUS_VISION_MODEL:-}
       NEBIUS_API_KEY: ${NEBIUS_API_KEY:-}
       NEBIUS_BASE_URL: ${NEBIUS_BASE_URL:-}
       MCP_REQUEST_TIMEOUT_MS: ${MCP_REQUEST_TIMEOUT_MS:-900000}
@@ -27,8 +28,11 @@ services:
       CAPABILITY_URL: http://capability:8788
       ROOMTRACE_URL: http://roomtrace:8000
       CHAT_DB_PATH: /data/conversations.sqlite
+      GUIDE_REPLAY_DIR: /app/replay-media
     ports: ["127.0.0.1:${LOCAL_HOST_PORT:-8789}:${LOCAL_HOST_PORT:-8789}"]
-    volumes: ["chat-data:/data"]
+    volumes:
+      - chat-data:/data
+      - ${GUIDE_REPLAY_DIR:-./data/video_previews/aria}:/app/replay-media:ro
     depends_on: ["capability", "roomtrace"]
     restart: unless-stopped
     init: true

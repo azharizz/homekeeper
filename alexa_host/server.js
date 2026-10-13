@@ -6,6 +6,7 @@ import { createAgent } from "./agent.js";
 import { errorHandler } from "../capability/server.js";
 import { UserError } from "../capability/store.js";
 import { roomtraceProxy } from "./roomtrace.js";
+import { guideReplay, computeGuideGuidance } from "./guide.js";
 
 export function createHost(config) {
   const app = express();
@@ -31,7 +32,7 @@ export function createHost(config) {
       "Referrer-Policy": "no-referrer",
       "X-Frame-Options": "DENY",
       "Content-Security-Policy":
-        "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: blob:; connect-src 'self' blob:; worker-src 'self' blob:; frame-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+        "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self' blob:; worker-src 'self' blob:; frame-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
     });
     next();
   });
@@ -48,6 +49,16 @@ export function createHost(config) {
   app.use("/api", (_req, res, next) => {
     res.set("Cache-Control", "no-store");
     next();
+  });
+  app.get("/api/guide-replay", (_req, res) => res.json(guideReplay));
+  // A fixed local file only; Express handles HEAD, byte ranges and streaming.
+  app.get("/api/guide-replay/aria.mp4", (_req, res, next) => {
+    res.sendFile(resolve(config.guideReplayDir || "data/video_previews/aria", "dino-demo-79-83-slow.mp4"), error => {
+      if (!error) return;
+      if (error.code === "ENOENT" || error.code === "ENOTDIR")
+        return next(new UserError("The local Aria replay clip is missing. Add dino-demo-79-83-slow.mp4 to GUIDE_REPLAY_DIR.", 404));
+      next(error);
+    });
   });
   app.get("/api/status", async (_req, res) => {
     let capability = false;
@@ -71,9 +82,14 @@ export function createHost(config) {
   app.get("/api/conversations/:id", (req, res) =>
     res.json(agent.get(z.string().uuid().parse(req.params.id))),
   );
+  app.post("/api/conversations/:id/guidance", express.json({ limit: "8kb" }), async (req, res) => {
+    const id = z.string().uuid().parse(req.params.id);
+    const input = z.object({ guide_context: z.unknown() }).strict().parse(req.body);
+    res.json(await computeGuideGuidance(config, agent.get(id), input.guide_context));
+  });
   app.post(
     "/api/conversations/:id/turn",
-    express.json({ limit: "40kb" }),
+    express.json({ limit: "2mb" }),
     async (req, res) => {
       const input = z
         .object({
@@ -82,6 +98,10 @@ export function createHost(config) {
           retry: z.literal(true).optional(),
           execution: z.enum(["direct", "review"]).optional(),
           read_only: z.boolean().optional(),
+          guide: z.boolean().optional(),
+          image: z.unknown().optional(),
+          guide_context: z.unknown().optional(),
+          guide_replay: z.unknown().optional(),
         })
         .refine(
           (a) =>
@@ -206,8 +226,10 @@ if (import.meta.url === pathToFileURL(process.argv[1]).href) {
     token: process.env.HOMEKEEPER_TOKEN,
     capabilityUrl,
     roomtraceUrl: process.env.ROOMTRACE_URL || "http://127.0.0.1:8790",
+    guideReplayDir: process.env.GUIDE_REPLAY_DIR || resolve("data/video_previews/aria"),
     mcpUrl: `${capabilityUrl}/mcp`,
     model: process.env.NEBIUS_MODEL,
+    visionModel: process.env.NEBIUS_VISION_MODEL,
     apiKey: process.env.NEBIUS_API_KEY,
     baseUrl: process.env.NEBIUS_BASE_URL,
     mcpTimeout: Number(process.env.MCP_REQUEST_TIMEOUT_MS || 900000),

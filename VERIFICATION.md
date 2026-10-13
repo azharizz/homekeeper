@@ -1,3 +1,34 @@
+# Automatic calibration and reusable guidance — mock scope
+
+- Focused Node checks: 9/9 passed (`tests/guide.test.js`, `tests/guide-simulation.test.js`, `tests/guide-replay-ui.test.js`). Mocked Aria-shaped routes cover different positions, destinations, heading changes, corners, arrival and stale/lost inputs.
+- `features/roomtrace/tests/check_automatic_calibration.py` passed with temporary synthetic inputs and mocked image features. It exercises actual camera fitting/publication, held-out checks, missing evidence, immutable rebuilds and revision conflicts without touching saved Spaces.
+- `npm run build` passed; existing shared Scene chunk-size warning remains.
+- The normal Guide was opened in Chromium against mocked Aria readiness and mocked media. It displayed the missing-calibration reason in the existing caption rather than starting tracking. No physical camera or AI provider was used.
+- No integration suite, real calibration, live walking, or production deployment was run for this change. Existing Aria data, media and simulation were not replaced. Calibration automation still requires genuine observed model/photo correspondences and supported lens calibration; raw images alone do not supply them.
+
+---
+
+# Scripted Aria simulation
+
+- `npm test`: 20/20 passed; build passed. Existing shared Scene chunk warning remains. Local-host rebuilt/recreated.
+- The actual native browser spoke all three scripted cues with successful start/end events: “Two steps forward,” “Be careful. Three steps forward, there is a table,” and “Table ahead. Stop here.”
+- Initial simulation smoke verified speech completion resumes playback and the final frame stops at 16 seconds. After the reported POV mismatch, the authored path was changed to five position/yaw/pitch/roll keyframes, a 95-degree perspective lens and square comparison surfaces. Actual browser views at start, midpoint and end were inspected; the camera now approaches the red-wall seating area rather than facing the sofa head-on. No browser errors were observed. This is a visual approximation: source fisheye distortion and estimated furniture geometry still differ, so pixel alignment is not verified.
+- This explicitly replaces automatic image descriptions with the user-authorized simulation. Camera coordinates, route and step cues are authored, not inferred or measured. The Simulation indicator remains visible; live-camera tracking and optional provider questions are separate.
+
+---
+
+# Experimental live Home Guide
+
+Verified 2026-10-13. Concurrent agents implemented the browser tracker, run-local guide context/targets, and the synchronized 3D debugger. This verifies local software behavior, not safe physical navigation.
+
+- `npm test`: 15/15 passed, including stale/map/revision boundaries, saved item versus container, route/context validation, camera cancellation and deterministic WebXR scheduler/reset/cleanup.
+- `npm run build`, `npm run check:browser`, and `npm run check:roomtrace` passed. The shared Scene chunk still triggers Vite's >500 kB warning.
+- An isolated native fake webcam fed a calibrated optical fixture to the actual RoomTrace SIFT/PnP endpoint through HomeKeeper. Localization returned 23 inliers and 0.037 px median reprojection error; the browser showed a fresh quaternion-driven POV and a real 3.05 estimated-metre route. Blank frames cleared pose, rotation, route and progress. Stop/reopen and navigation prevented further uploads; no uncaught UI errors. This synthetic static fixture does not prove movement accuracy or physical walking progress. No localization endpoint or provider response was mocked in that smoke run.
+- The rebuilt local host loaded `/?view=guide&debug=1&space=ecc1c20c1b0340468c284e2b4fb86e4b`, selected revision 5, rendered its actual saved model and target, and fit a 390 px viewport without overflow. This requested Space has zero localization landmarks; the debugger correctly shows Position unknown and a calibration warning rather than a live physical pose.
+- Not exercised: a physical phone, WebXR raw-camera/inertial hardware, OS backgrounding, external AI turns for the new tracking context, surveyed calibration accuracy, or blind-user mobility safety. Phone camera/WebXR use still requires a secure authenticated deployment; the local unauthenticated household host must not be publicly exposed.
+
+---
+
 # Current integration: native Spaces
 
 Verified 2026-09-30. The single HomeKeeper frontend lazy-loads `web/spaces/`, owns its React tree, and calls the existing geometry API. The iframe, separate frontend build, duplicate fonts and geometry-service web hosting were removed. User-facing navigation is Spaces; backend routes, environment settings and MCP identifiers retain their existing names.

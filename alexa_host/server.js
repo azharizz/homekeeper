@@ -6,11 +6,13 @@ import { createAgent } from "./agent.js";
 import { errorHandler } from "../capability/server.js";
 import { UserError } from "../capability/store.js";
 import { roomtraceProxy } from "./roomtrace.js";
-import { guideReplay, computeGuideGuidance } from "./guide.js";
+import { guideReplay, computeGuideGuidance, validateGuideImage } from "./guide.js";
+import { createGuideObstacleObserver } from "./guide-obstacles.js";
 
 export function createHost(config) {
   const app = express();
   const agent = createAgent(config);
+  const observeObstacle = createGuideObstacleObserver(config);
   app.disable("x-powered-by");
   app.use((req, res, next) => {
     const host = req.headers.host;
@@ -82,6 +84,47 @@ export function createHost(config) {
   app.get("/api/conversations/:id", (req, res) =>
     res.json(agent.get(z.string().uuid().parse(req.params.id))),
   );
+  app.post("/api/guide-obstacles", express.json({ limit: "2mb" }), async (req, res) => {
+    res.json(await observeObstacle(req.body));
+  });
+  app.post("/api/conversations/:id/recognize", express.json({ limit: "2mb" }), async (req, res) => {
+    const id = z.string().uuid().parse(req.params.id);
+    agent.get(id);
+    const generation = agent.roomGeneration(id);
+    const abort = new AbortController();
+    res.on("close", () => { if (!res.writableEnded) abort.abort(); });
+    const input = z.object({ image: z.unknown() }).strict().parse(req.body);
+    const image = validateGuideImage({ guide: true, message: "Identify the current saved room", image: input.image });
+    if (!image) throw new UserError("A fresh camera frame is required.");
+    const body = new FormData();
+    body.set("image", new Blob([Buffer.from(image.data_url.split(",")[1], "base64")], { type: "image/jpeg" }), "camera.jpg");
+    body.set("captured_at", String(image.captured_at));
+    const response = await fetch(`${config.roomtraceUrl || "http://127.0.0.1:8790"}/api/recognize`, {
+      method: "POST", headers: { Authorization: `Bearer ${config.token}` }, body,
+      signal: AbortSignal.any([abort.signal, AbortSignal.timeout(12000)]), redirect: "error",
+    });
+    if (!response.ok) throw new UserError("Room recognition is unavailable. Stay still and try again.", 503);
+    const result = await response.json();
+    let current = agent.get(id);
+    if (result.status === "recognized") {
+      const mapId = z.string().regex(/^[a-f0-9]{32}$/).parse(result.map_id);
+      if (Date.now() / 1000 - image.captured_at > 5)
+        return res.json({ status: "unknown", reason: "The camera match expired. Take another view." });
+      const sceneResponse = await fetch(`${config.roomtraceUrl || "http://127.0.0.1:8790"}/api/maps/${mapId}/scene`, {
+        headers: { Authorization: `Bearer ${config.token}` }, signal: AbortSignal.any([abort.signal, AbortSignal.timeout(5000)]), redirect: "error",
+      });
+      if (!sceneResponse.ok) throw new UserError("The recognized room is no longer available.", 409);
+      const scene = await sceneResponse.json();
+      if (scene.revision !== result.localization?.map_revision || scene.guide_readiness?.ready !== true ||
+          Date.now() / 1000 - image.captured_at > 5)
+        return res.json({ status: "unknown", reason: "Room evidence changed or expired. Take another view." });
+      if (abort.signal.aborted || res.destroyed || agent.roomGeneration(id) !== generation)
+        throw new UserError("Room selection changed while recognizing. Take a new view.", 409);
+      current = agent.bindGuideRoom(id, { id: mapId, revision: scene.revision, name: scene.name });
+    }
+    res.json({ ...result, guideSpace: current.guideSpace || null, guideTarget: current.guideTarget || null,
+      guideDestination: current.guideDestination || null });
+  });
   app.post("/api/conversations/:id/guidance", express.json({ limit: "8kb" }), async (req, res) => {
     const id = z.string().uuid().parse(req.params.id);
     const input = z.object({ guide_context: z.unknown() }).strict().parse(req.body);
@@ -152,7 +195,7 @@ export function createHost(config) {
       ))
         throw new UserError("Endpoint not found.", 404);
       if (req.method === "POST" &&
-          /^\/ui-actions\/(link_space_object|save_spatial_task|schedule_spatial_maintenance|save_spatial_location)$/.test(route)) {
+          /^\/ui-actions\/(link_space_object|save_spatial_task|schedule_spatial_maintenance|save_spatial_location|resolve_spatial_location)$/.test(route)) {
         let input;
         try {
           input = JSON.parse(req.body.toString());
@@ -185,6 +228,19 @@ export function createHost(config) {
               "The RoomTrace model is unavailable or changed. Refresh it before linking or pinning.",
               409,
             );
+          if (route === "/ui-actions/resolve_spatial_location") {
+            const document = current.document || current.architecture;
+            const element = document?.elements?.find(value => value.id === input.element_id);
+            if (!element || element.label !== input.element_label)
+              throw new UserError("The selected model object changed. Read the location candidates again.", 409);
+            const sceneResponse = await fetch(
+              `${config.roomtraceUrl || "http://127.0.0.1:8790"}/api/maps/${spaceId}/scene`,
+              { headers: { Authorization: `Bearer ${config.token}` }, signal: AbortSignal.timeout(5000), redirect: "error" },
+            );
+            const scene = sceneResponse.ok ? await sceneResponse.json() : null;
+            if (scene?.revision !== revision || scene.name !== input.space_name)
+              throw new UserError("The selected room changed. Read the location candidates again.", 409);
+          }
         }
       }
       let upstream;

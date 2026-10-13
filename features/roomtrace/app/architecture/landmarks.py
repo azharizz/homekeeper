@@ -17,19 +17,23 @@ def guidance(directory):
     return json.loads(path.read_text()) if path.is_file() else None
 
 
-def _write_landmarks(job, directory, scene, fits, max_error_px):
+def _declared_index(job, directory, scene, fits, max_error_px):
     document = Architecture.model_validate(scene["architecture"])
     observations = {}
+    held_out = set()
     for fit in fits:
         for m in fit["matches"]:
-            if m["role"] != "fit" or m["error_px"] > max_error_px:
+            if m["error_px"] > max_error_px:
                 continue
             key = (
                 m["element_id"],
                 json.dumps(m.get("feature") or m["anchor"], sort_keys=True),
             )
+            if m["role"] == "check":
+                held_out.add(key)
+                continue
             observations.setdefault(key, []).append((fit, m))
-    observations = {key: rows for key, rows in observations.items() if len(rows) >= 2}
+    observations = {key: rows for key, rows in observations.items() if len(rows) >= 2 and key not in held_out}
     if len(observations) < 8:
         raise ValueError(
             "Need at least eight shared fitting landmarks, each observed in two photos within the selected pixel error. Checks are never index training data."
@@ -110,12 +114,34 @@ def _write_landmarks(job, directory, scene, fits, max_error_px):
         point_ids=np.array(ids),
         reference_ids=np.array(reference_ids),
     )
+    return {"filename": filename, "ids": ids, "references": references, "evidence": evidence}
+
+
+def _write_landmarks(job, directory, scene, fits, max_error_px):
+    from ..capture_calibration import registered_index
+
+    document = Architecture.model_validate(scene["architecture"])
+    capture = scene.get("capture_reconstruction")
+    index = None
+    if capture and capture.get("status") == "reconstructed":
+        try:
+            index = registered_index(job, directory, scene, max_error_px)
+        except (ValueError, RuntimeError, OSError) as error:
+            scene["capture_registration_failure"] = str(error)
+    if index is None:
+        index = _declared_index(job, directory, scene, fits, max_error_px)
+    filename, ids, references, evidence = (
+        index["filename"], index["ids"], index["references"], index["evidence"]
+    )
+    if index.get("registration"):
+        scene["guide_readiness"]["validation"] = index["registration"]["validation"]
     result = {
         "revision": scene["revision"],
         "artifact_revision": scene["artifact_revision"],
         "units": "estimated_metres",
         "physically_verified": False,
         "index_file": filename,
+        "feature_extractor": "colmap_sift" if index.get("registration") else "opencv_sift",
         "index_bytes": (directory / filename).stat().st_size,
         "landmark_count": len(set(ids)),
         "references": references,
@@ -168,6 +194,8 @@ def _write_landmarks(job, directory, scene, fits, max_error_px):
             if element.kind in {"wall", "slab", "stair", "staircase"}
         ],
         "measurements": scene.get("measurement_checks", []),
+        "capture_registration": scene.get("capture_registration"),
+        "reported_scale": scene.get("reported_scale"),
         "limits": "Observed landmarks attached to estimated geometry. Map-relative pose is not surveyed physical position; plan hulls are not walking clearance. No detailed mesh is needed to localize.",
     }
     store.atomic_json(directory / "guidance.json", result)
@@ -197,10 +225,13 @@ def calibrate_scene(job, directory, scene, fits, failures, max_error_px=4.0):
     }
     reasons = [f"{item['source']}: {item['reason']}" for item in failures]
     if not fits:
-        reasons.append("No fitted source cameras. Supply observed photo-to-model correspondences and exact lens calibration.")
+        reasons.append("No observed photo-to-model anchors. Multi-view feature tracks cannot identify authored geometry: supply corresponding model anchors in source views, including held-out checks.")
     uncalibrated = [fit["source"] for fit in fits if not fit["calibration_supplied"]]
     if uncalibrated:
         reasons.append("Exact source lens calibration is missing for: " + ", ".join(uncalibrated))
+    capture = scene.get("capture_reconstruction")
+    if capture and capture.get("status") == "unavailable" and not fits:
+        reasons.append("Capture reconstruction unavailable: " + capture["reason"])
     if validation["status"] == "failed":
         reasons.append("Held-out projection checks exceed the selected pixel error threshold.")
     readiness = {
@@ -215,6 +246,7 @@ def calibrate_scene(job, directory, scene, fits, failures, max_error_px=4.0):
         "validation": validation,
         "units": "estimated_metres",
         "physically_verified": False,
+        "lens_provenance": {fit["source"]: fit["calibration_source"] for fit in fits},
         "limits": "Ready means a revision-owned visual localization index exists; it does not mean verified scale, live pose, obstacle clearance or safe walking.",
     }
     scene["guide_readiness"] = readiness
@@ -226,6 +258,8 @@ def calibrate_scene(job, directory, scene, fits, failures, max_error_px=4.0):
             result = _write_landmarks(job, directory, scene, fits, max_error_px)
         except (ValueError, OSError, cv2.error) as error:
             reasons.append(str(error))
+            if scene.get("capture_registration_failure"):
+                reasons.append(scene["capture_registration_failure"])
     if result is not None:
         readiness.update(status="ready", ready=True, landmark_count=result["landmark_count"])
         scene.update(localizable=True, landmark_count=result["landmark_count"])

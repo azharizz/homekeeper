@@ -3,6 +3,7 @@ import { request } from "./spaces/api";
 import { createGuideTracker } from "./guide-tracking.js";
 import { completeGuideSpeech, replaySourceTime } from "./guide-replay-state.js";
 import { simulationFrame, SIMULATION_CUES } from "./guide-simulation.js";
+import GuideConnections from "./GuideConnections.jsx";
 const GuideDebug = lazy(() => import("./GuideDebug.jsx"));
 import "./guide.css";
 
@@ -23,6 +24,75 @@ export default function HomeGuide() {
   const cameraActive = useRef(false), mediaPending = useRef(null), mediaEpoch = useRef(0), xrStarting = useRef(false);
   const selectionEpoch = useRef(0);
   const guidanceSpeech = useRef({ key: null, at: 0, voice: null });
+  const [locationResolution, setLocationResolution] = useState(null);
+  const [destination, setDestination] = useState(null);
+  const [obstacleConsent, setObstacleConsent] = useState(false), [obstacleStatus, setObstacleStatus] = useState("unknown");
+  const obstaclePause = useRef(false);
+  useEffect(() => {
+    if (replay || !cameraOn || !obstacleConsent) return;
+    const abort = new AbortController();
+    let timeout;
+    async function observe() {
+      try {
+        if (pending.current || document.hidden) return;
+        const result = await json("/api/guide-obstacles", { consent: true, image: snapshot() },
+          AbortSignal.any([abort.signal, AbortSignal.timeout(6000)]));
+        if (abort.signal.aborted || !alive.current) return;
+        setObstacleStatus(result.status === "blocked" ? "Visible obstacle reported; clearance unknown" : "unknown");
+        if (result.status === "blocked" && !obstaclePause.current) {
+          obstaclePause.current = true; routeRef.current = null; setRoute(null);
+          clearGuidanceSpeech();
+          if (!pending.current) { interrupt(); say(result.caution); }
+        }
+      } catch {
+        if (!abort.signal.aborted) setObstacleStatus("unknown");
+      } finally {
+        if (!abort.signal.aborted) timeout = setTimeout(observe, 4000);
+      }
+    }
+    void observe();
+    return () => { abort.abort(); clearTimeout(timeout); };
+  }, [cameraOn, obstacleConsent]);
+  const discoveryPending = useRef(false);
+  useEffect(() => {
+    if (replay || !cameraOn) return;
+    const abort = new AbortController();
+    let timeout;
+    async function discover() {
+      try {
+        if (pending.current || discoveryPending.current || trackingRef.current.status === "tracking" || document.hidden) return;
+        discoveryPending.current = true;
+        const selection = selectionEpoch.current;
+        const image = snapshot();
+        if (!session.current) {
+          const created = await json("/api/conversations", {}, abort.signal);
+          if (abort.signal.aborted) return;
+          session.current = created.id;
+        }
+        const result = await json(`/api/conversations/${session.current}/recognize`, { image },
+          AbortSignal.any([abort.signal, AbortSignal.timeout(18000)]));
+        if (abort.signal.aborted || !alive.current || selection !== selectionEpoch.current || pending.current) return;
+        if (result.status === "recognized" && result.guideSpace) {
+          serverRoom.current = result.guideSpace; room.current = result.guideSpace;
+          setSelectedRoom(current => current?.id === result.guideSpace.id && current?.revision === result.guideSpace.revision ? current : result.guideSpace);
+          setTarget(result.guideTarget || null);
+          setDestination(result.guideDestination || null);
+          setTrackingError("");
+          if (!utterance.current) { interrupt(); say(`Camera matched ${result.guideSpace.name}. Model alignment remains an estimate.`); }
+        } else {
+          setTrackingError(result.reason || "Room unknown. Show another view of the saved room.");
+          if (!utterance.current) setCaption(result.reason || "I cannot identify this room. Show another view.");
+        }
+      } catch (error) {
+        if (!abort.signal.aborted && alive.current) setTrackingError(error.message);
+      } finally {
+        discoveryPending.current = false;
+        if (!abort.signal.aborted) timeout = setTimeout(discover, 4000);
+      }
+    }
+    void discover();
+    return () => { abort.abort(); clearTimeout(timeout); };
+  }, [cameraOn]);
   useEffect(() => {
     if (replay) return;
     tracker.current = createGuideTracker({ video: video.current, request, onUpdate(value) {
@@ -112,27 +182,31 @@ export default function HomeGuide() {
     async function updateRoute() {
       const pose = trackingRef.current;
       try {
-        if (!scene || !target || pose.status !== "tracking" || !pose.position || Date.now() / 1000 - pose.capturedAt > 3 ||
+        if (obstaclePause.current) { routeRef.current = null; setRoute(null); clearGuidanceSpeech(); return; }
+        if (!scene || (!target && !destination) || pose.status !== "tracking" || !pose.position || Date.now() / 1000 - pose.capturedAt > 3 ||
             pose.mapId !== scene.id || pose.revision !== scene.revision) {
           routeRef.current = null; setRoute(null); clearGuidanceSpeech(); return;
         }
-        let value, guidance;
+        let value, guidance, effectiveTarget = target;
         if (session.current && serverRoom.current?.id === scene.id && serverRoom.current?.revision === scene.revision) {
           const result = await json(`/api/conversations/${session.current}/guidance`, {
             guide_context: { map_id: scene.id, revision: scene.revision, status: "tracking", source: pose.source,
               captured_at: pose.capturedAt, position: pose.position, quaternion: pose.quaternion },
           }, AbortSignal.any([abort.signal, AbortSignal.timeout(5000)]));
           value = result.route; guidance = result.guidance;
+          effectiveTarget = result.target || target;
           if (!value) { routeRef.current = null; setRoute(null); clearGuidanceSpeech(); return; }
         } else {
+          if (!target) { routeRef.current = null; setRoute(null); clearGuidanceSpeech(); return; }
           value = await request(`/maps/${scene.id}/architecture/walkthrough`, { method: "POST",
             headers: { "Content-Type": "application/json" }, signal: AbortSignal.any([abort.signal, AbortSignal.timeout(5000)]),
             body: JSON.stringify({ expected_revision: scene.revision, floor_id: target.floorId, target_id: target.elementId, start: [pose.position[0], pose.position[2]] }) });
         }
+        if (obstaclePause.current) { routeRef.current = null; setRoute(null); clearGuidanceSpeech(); return; }
         const current = trackingRef.current;
         if (id !== routeEpoch.current || current.status !== "tracking" || current.revision !== scene.revision ||
             Date.now() / 1000 - current.capturedAt > 3) return;
-        if (current.mapId !== scene.id || value.target_id !== target.elementId || value.floor_id !== target.floorId || value.revision !== scene.revision) return;
+        if (current.mapId !== scene.id || !effectiveTarget || value.target_id !== effectiveTarget.elementId || value.floor_id !== effectiveTarget.floorId || value.revision !== scene.revision) return;
         if (Math.hypot(...current.position.map((v, axis) => v - pose.position[axis])) > 0.2 ||
             Math.abs(current.quaternion.reduce((sum, v, axis) => sum + v * pose.quaternion[axis], 0)) < Math.cos(Math.PI / 24)) {
           routeRef.current = null; setRoute(null); clearGuidanceSpeech(); return;
@@ -155,7 +229,7 @@ export default function HomeGuide() {
     }
     void updateRoute();
     return () => { routeEpoch.current++; clearTimeout(timeout); abort.abort(); clearGuidanceSpeech(); };
-  }, [cameraOn, scene, target]);
+  }, [cameraOn, scene, target, destination]);
   function clearGuidanceSpeech() {
     const voice = guidanceSpeech.current.voice;
     guidanceSpeech.current = { key: null, at: 0, voice: null };
@@ -352,11 +426,28 @@ export default function HomeGuide() {
         setSelectedRoom(current => current?.id === chosen?.id && current?.revision === chosen?.revision ? current : chosen);
       }
       setTarget(result.guideTarget || null);
+      setLocationResolution(result.guideLocationResolution || null);
+      setDestination(result.guideDestination || null);
       pending.current = null;
       const answer = result.messages.filter(m => m.role === "assistant" && m.content).at(-1)?.content;
       if (replay && !answer) throw new Error("The AI provider returned no answer. Please try again.");
       say(answer || "I couldn't answer that. Please try again.", onSpoken);
     } catch (error) { if (id === epoch.current) { session.current = null; pending.current = null; if (replay) handsFree.current = false; say(replay ? `Replay AI request failed: ${error.message}. The frame stays paused.` : error.message); } }
+  }
+  async function confirmLocation(candidate) {
+    if (!locationResolution || replay) return;
+    interrupt();
+    const id = epoch.current, abort = new AbortController(); pending.current = abort;
+    try {
+      const { space_id, element_id, space_revision, space_name, element_label } = candidate;
+      await json("/api/ui-actions/resolve_spatial_location", {
+        memory_id: locationResolution.memory_id, expected_revision: locationResolution.expected_revision,
+        space_id, element_id, space_revision, space_name, element_label,
+      }, abort.signal);
+      if (id !== epoch.current) return;
+      pending.current = null; setLocationResolution(null);
+      await ask(`I confirmed the saved location for memory ${locationResolution.memory_id} as ${element_label} in ${space_name}, map ${space_id}, element ${element_id}. Read the updated record and use it as my destination; do not assume I am currently in that room.`);
+    } catch (error) { if (id === epoch.current) { pending.current = null; say(error.message); } }
   }
   async function openCamera() {
     if (replay) { camera(); return; }
@@ -379,6 +470,16 @@ export default function HomeGuide() {
     const command = text.trim().replace(/[.!?]+$/, "").toLowerCase();
     if (/^(stop|cancel|stop everything|stop demo|stop replay)$/.test(command)) { stop(); return; }
     if (/^(repeat|say that again)$/.test(command)) { say(last.current); return; }
+    if (!replay && command === "resume model guidance") {
+      obstaclePause.current = false;
+      say("Resuming model estimates only. Physical clearance remains unknown.");
+      return;
+    }
+    if (!replay && /^(confirm location|yes confirm location)$/.test(command)) {
+      if (locationResolution?.candidates?.length === 1 && locationResolution.status !== "incomplete_evidence") await confirmLocation(locationResolution.candidates[0]);
+      else say("Please choose the exact room and container before confirming the location.");
+      return;
+    }
     if (replay && /^(play|play demo|play the demo|restart|restart demo|restart the demo|replay|replay demo)$/.test(command)) { await playReplay(); return; }
     if (/^(open|start|turn on)( the| my)? camera$/.test(command)) {
       if (cameraActive.current) say("Camera is already on. Ask about the view."); else await openCamera();
@@ -489,9 +590,20 @@ export default function HomeGuide() {
       <button onClick={talk} aria-label={phase === "idle" || (replay && phase === "playing") ? "Talk" : "Stop everything"}><span aria-hidden="true">{phase === "idle" || (replay && phase === "playing") ? "●" : "■"}</span>{phase === "idle" || (replay && phase === "playing") ? "Talk" : "Stop"}</button>
       <button onClick={camera} disabled={replay && (!replayMeta || !!replayError)} aria-label={cameraOn ? "Camera: describe this view" : "Camera"}><span aria-hidden="true">◎</span>Camera</button>
     </div>
+    {!replay && locationResolution?.candidates?.length > 0 && <section aria-label="Confirm saved item location">
+      <p>Confirm where you actually stored {locationResolution.title}. This does not detect the item.</p>
+      {locationResolution.candidates.map(candidate => <button key={`${candidate.space_id}:${candidate.element_id}`}
+        disabled={!!pending.current} onClick={() => confirmLocation(candidate)}>
+        Confirm {candidate.element_label} in {candidate.space_name}
+      </button>)}
+    </section>}
     {!replay && <p className="guide-demo-link"><a href="/?view=guide&replay=aria">Try the prerecorded voice demo · no camera</a></p>}
     <p className="voice-footnote">{replay ? "Scripted simulation · not measured tracking" : <>{cameraOn ? `Tracking: ${tracking.status} · ${tracking.source || "camera"} · ` : ""}Experimental model alignment · Not a verified walking aid</>}</p>
+    {!replay && obstacleConsent && <p role="status">Visible-obstacle observation: {obstacleStatus}. A camera image cannot confirm a clear path.</p>}
     <details className="voice-privacy"><summary>Privacy & help</summary>
+      {!replay && cameraOn && <GuideConnections request={request} scene={scene} tracking={tracking} onMessage={say} />}
+      {!replay && <label><input type="checkbox" checked={obstacleConsent} onChange={event => setObstacleConsent(event.target.checked)} />
+        Send camera stills to the configured AI provider every few seconds to flag visible obstacles. This cannot detect every hazard or confirm clearance.</label>}
       {replay ? <>
         <p>Camera starts the scripted simulation. Spoken step cues and the authored virtual camera share the video's timeline. Playback pauses for each cue and resumes after speech finishes. These steps and positions are demonstration values, not measured directions. Talk pauses playback for optional AI questions about the visible frame.</p>
         <p>The demo is prerecorded Aria footage from source seconds 79–83, encoded at quarter speed and played at normal speed. Frame JPEGs are resized to at most 1024 pixels without overlays or cropping; they carry the source-video time plus the current capture wall time. Still images go to the configured AI provider; image bytes are not saved in chat history. Saved Space geometry is reference-only, not physical alignment or safe navigation. Talk uses your browser's microphone and speech service. Stop, backgrounding, or leaving cancels playback, requests, speech and microphone. Physical camera, localization and AR stay off. Speech or provider failures leave the frame paused.</p>

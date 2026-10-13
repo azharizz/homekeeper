@@ -339,6 +339,16 @@ const uiActions = {
     revision: z.number().int().positive(),
     asset_id: id,
   }),
+  resolve_spatial_location: z.object({
+    ...request,
+    memory_id: id,
+    expected_revision: z.number().int().positive(),
+    space_id: spatial.space_id.unwrap().unwrap(),
+    element_id: spatial.element_id.unwrap().unwrap(),
+    space_revision: spatial.space_revision.unwrap().unwrap(),
+    space_name: text,
+    element_label: text,
+  }).strict(),
   save_spatial_location: tools.save_memory.schema.safeExtend({
     ...spatial,
     space_name: text.nullable().optional(),

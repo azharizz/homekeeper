@@ -128,7 +128,7 @@ export function createGuideTracker({ video, onUpdate, request }) {
   const current = (run) => generation === run && selected != null && !document.hidden;
   function publish(status, reason, values = {}) {
     state = { ...state, status, reason, position: null, quaternion: null, capturedAt: null,
-      inliers: null, reprojectionErrorPx: null, latencyMs: null,
+      inliers: null, reprojectionErrorPx: null, latencyMs: null, queryId: null, queryCapturedAt: null,
       mapId: selected?.id ?? null, revision: selected?.revision ?? null, source: xr ? "webxr" : "camera", ...values };
     onUpdate({ ...state });
   }
@@ -141,6 +141,8 @@ export function createGuideTracker({ video, onUpdate, request }) {
       position: position.toArray(), quaternion: rotation.toArray(), capturedAt, source,
       inliers: result?.inliers ?? state.inliers, reprojectionErrorPx: result?.reprojection_error_px ?? state.reprojectionErrorPx,
       latencyMs: result?.latency_ms ?? state.latencyMs,
+      queryId: result?.query_id ?? state.queryId,
+      queryCapturedAt: result?.captured_at ?? state.queryCapturedAt,
     });
   }
   function snapshot() {
@@ -214,6 +216,7 @@ export function createGuideTracker({ video, onUpdate, request }) {
         }
         // A new verified map match replaces alignment; never extrapolate across a reset or drift.
         alignment = next; alignedAt = image.captured_at;
+        state.queryId = result.query_id || null; state.queryCapturedAt = result.captured_at;
         if (!lastXRFrame || nowSeconds() - lastXRFrame > 1) publish("lost", "XR pose unavailable. Position unknown.");
       } else poseUpdate(matrix, result.captured_at, result, "camera");
     } catch (error) {

@@ -1,3 +1,29 @@
+# Current verification — three Home Guide scenarios
+
+Verified 2026-10-13 using disposable fixtures and mocked provider/browser boundaries; no existing Space was mutated.
+
+- `npm test`: 46/46 passed, including room-recognition cancellation, target resolution, same-/cross-room guidance, memory confirmation, tracking loss and obstacle-pause behavior.
+- `npm run build`, `npm run check:browser`, and `npm run check:roomtrace` passed. The `Scene` chunk still exceeds Vite’s 500 kB warning threshold.
+- RoomTrace isolated Python checks passed: capture calibration, automatic calibration/publication and multi-room recognition. They use synthetic evidence/mocked image features; they do not establish calibration on the Aria footage or another physical room.
+- Browser checks verified the 390 px capture form’s multipart flow and distinct photo/endpoint/axis labels. A final 390 px viewport run after the engine-card sizing fix measured `scrollWidth=390` with no element outside the viewport.
+- A separate mocked browser flow exercised multi-Space recognition/ambiguity refusal, saved destination restoration, explicit doorway confirmation and tracking loss. Toy-memory confirmation/reconfirmation and fresh-image behavior were exercised with temporary data. These prove app contracts, not physical localization, hidden-toy detection, actual speech on a phone, obstacle clearance or safe walking.
+- Genuine photo-to-model anchors and measured scale, confirmed doorway endpoints, compatible camera calibration, a physical device/provider and the toy’s current visible location remain real-world prerequisites.
+
+---
+
+
+# Three mobile-web Guide scenarios — mocked integration
+
+- `npm test`: 46/46 passed after the location-dialog fix. Capture calibration, automatic publication and multi-room recognition Python checks passed with isolated mocked evidence; no saved Spaces were modified.
+- `npm run build` passed, including the mobile capture fixes. The existing shared Scene >500 kB warning remains.
+- Mocked Chromium at 390 × 844 exercised camera discovery: ambiguous matches displayed the reason and left tracking stopped, without horizontal overflow.
+- The measured-reference browser submission carried four images, two distinct source references, all eight endpoint coordinates, distance, uncertainty and provenance through multipart submission. Testing exposed a global 760 px body minimum, intrinsic engine-option grid overflow and duplicate coordinate labels; all were corrected. The final built form at 390 × 844 had scroll width 390, no out-of-bounds elements, eight distinct photo/endpoint/axis coordinate names and a valid multipart submission to the mock endpoint.
+- The saved-toy browser flow used a disposable household database and mocked speech input/provider/RoomTrace. Two candidates required explicit choice; confirmation preserved memory text and removed the dialog. A changed model revision required reconfirmation; the destination used the updated container revision. A fresh-image turn left memory unchanged. The mocked route used explicit virtual coordinates, not camera localization. Native speech output was unavailable in that test browser; actual audio and hidden-toy detection were not verified.
+- The mocked multi-room browser recognized Kitchen, refused ambiguity after tracking loss, recognized Bedroom and restored the seeded Kitchen destination on return. It recorded and explicitly confirmed both doorway sides with fresh query IDs and current map/floor/opening references. A focused host regression passed: delayed recognition cannot overwrite a room binding changed while the request was in flight.
+- Verification uses mocked cameras, providers and geometric evidence only. Genuine source-to-model correspondences, observed doorway associations and a real measured reference remain prerequisites. No physical-phone positioning, hidden-item localization, obstacle clearance, or safe walking is established. Aria simulation and media remain separate.
+
+---
+
 # Automatic calibration and reusable guidance — mock scope
 
 - Focused Node checks: 9/9 passed (`tests/guide.test.js`, `tests/guide-simulation.test.js`, `tests/guide-replay-ui.test.js`). Mocked Aria-shaped routes cover different positions, destinations, heading changes, corners, arrival and stale/lost inputs.

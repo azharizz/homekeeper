@@ -369,6 +369,17 @@ def reconstruct(job_id: str):
                 raise ValueError(
                     "Structured architecture requires 4 to 12 source views."
                 )
+            from .capture_calibration import capture_report
+
+            try:
+                reconstruction, components = run_sfm(directory, job["options"], stage)
+                capture_report(directory, reconstruction, components, job["options"])
+            except (ValueError, RuntimeError, OSError) as error:
+                # Retain a model-authoring capture, but never substitute invented calibration.
+                store.atomic_json(directory / "capture_reconstruction.json", {
+                    "status": "unavailable", "reason": str(error),
+                    "cameras": {}, "scale": None,
+                })
             store.update_job(
                 job_id,
                 status="awaiting_agent",
@@ -466,5 +477,6 @@ def clear_derived(directory: Path):
         "frames.json",
         "surface.glb",
         "points.ply",
+        "capture_reconstruction.json",
     ]:
         (directory / name).unlink(missing_ok=True)

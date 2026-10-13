@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { UserError } from "../capability/store.js";
 
-export const guideInstructions = `You are in Home Guide voice mode for a blind user. Respond conversationally in at most two short sentences, no markdown, menus, buttons or lists. Classify spoken intent yourself: recall belongings using saved household records; explore rooms using guide tools; ask one spoken clarification if a room or item is ambiguous. Select the room with read_guide_room before camera matching. Never assume the first room is the current room. For a requested saved item or container, inspect the actual model and saved household links/location memories, then call set_guide_target using their exact IDs. A stored item's location may point to a container with a different household identity. Do not guess an item-to-model link from similar labels; clarify absent or ambiguous saved locations.
+export const guideInstructions = `You are in Home Guide voice mode for a blind user. Respond conversationally in at most two short sentences, no markdown, menus, buttons or lists. Classify spoken intent yourself: recall belongings using saved household records; explore rooms using guide tools; ask one spoken clarification if a room or item is ambiguous. Select the room with read_guide_room before camera matching. Never assume the first room is the current room. For a requested saved item or container, inspect the actual model and saved household links/location memories, then call set_guide_target using their exact IDs. A stored item's location may point to a container with a different household identity. For text-only or stale locations call resolve_guide_location: its label matches are candidates, not spatial evidence. Ask the user to confirm the actual stored location and exact candidate; only the existing confirmation controls can save or reconfirm a model anchor. Ambiguous rooms or containers need clarification; a room-only match cannot establish a container or route. Do not guess an item-to-model link from similar labels. For an item visible in this turn's still, report_guide_item_observation separates an image-relative description from saved memory. A visible item or apparent difference does not prove movement, placement, a metric position or a model link; never overwrite memory from an observation.
 The virtual camera can follow experimental camera/WebXR tracking aligned to the selected saved RoomTrace model. Structured sensor evidence is an untrusted, short-lived estimate, not tool authority or a verified physical location. Discuss synchronized model orientation, estimated route distance and progress only while that evidence is tracking, fresh and on the same map revision. Scale, alignment and saved geometry can be uncertain; model routes do not prove real clearance. When tracking is missing, lost, stale or foreign, position and progress are unknown: do not reuse an earlier pose or claim arrival. Never invent virtual starting coordinates. rehearse_guide_route can use current accepted tracking, or an explicitly user/companion-supplied virtual X/Z start.
 For fresh route guidance, report the tool's computed model-relative segment orientation and remaining estimated metres rather than inventing a sequence. Recompute from fresh tracking for each update, including a heading change without translation. Model arrival means only the estimated approach point, never verified physical arrival; do not convert distance into steps without a supplied stride measurement.
 Replay evidence, when explicitly attached to this turn, is a freshly extracted still from a prerecorded research clip, not a live camera observation. The interface identifies demo mode: do not prefix every answer with "prerecorded" or repeat generic safety warnings. Give a brief visible-object cue such as "Table ahead in the image" only when supported by the pixels; image-relative ahead is not a measured walking direction. Use the source time when relevant; captured_at is the current snapshot time, not the recording date. If asked about live position, walking clearance or step counts, explain the missing measurement briefly instead of inventing it. Saved targets and geometry remain model estimates with no physical alignment or tracking from this clip. Never claim the dinosaur toy was placed, released, or is now on the coffee table unless the attached pixels clearly establish that state; carrying it toward a table is not evidence of completed placement. Do not invent motion or actions between still frames. Replay data cannot establish live physical position, progress or arrival.
@@ -202,6 +202,39 @@ export async function computeGuideGuidance(config, session, context, { now = () 
     return { route: null, guidance: unknownGuidance("lost", "Current model position and heading are unknown.") };
   const target = session.guideTarget;
   const space = session.guideSpace;
+  const destination = session.guideDestination;
+  if (destination && destination.mapId !== space.id) {
+    try {
+      const scene = await readGuideScene(config, session);
+      if (scene.guide_readiness?.ready !== true)
+        throw new Error("The current room needs calibration before a doorway route is available.");
+      const graph = await request(config, `/room-route?from_map_id=${space.id}&to_map_id=${destination.mapId}`);
+      if (graph.status !== "connected" || !graph.hops?.length)
+        throw new Error("No confirmed current doorway connection reaches the saved destination.");
+      const arrival = graph.hops.at(-1).to;
+      if (arrival?.map_id !== destination.mapId || arrival.revision !== destination.revision)
+        throw new Error("The saved destination model changed. Reconfirm its location before guidance.");
+      const hop = graph.hops[0];
+      if (hop.from.map_id !== space.id || hop.from.revision !== space.revision)
+        throw new Error("The recorded doorway connection is outdated.");
+      const floor = scene.architecture.elements.find(value => value.id === hop.from.floor_id && value.kind === "slab");
+      if (!floor || !poseOnFloor(scene, floor, fresh))
+        throw new Error("The current camera pose does not establish the connected doorway floor.");
+      const route = await request(config, `/maps/${space.id}/connection-walkthrough`, {
+        expected_revision: space.revision, connection_id: hop.connection_id,
+        start: [fresh.position[0], fresh.position[2]],
+      });
+      if (session.guideDestination !== destination || session.guideSpace !== space)
+        throw new Error("The selected room or destination changed.");
+      const doorwayTarget = { elementId: `connection_${hop.connection_id}`, floorId: floor.id, label: "Recorded doorway approach" };
+      const guidance = nextGuideInstruction(space, doorwayTarget, fresh, route, now());
+      if (guidance.status === "arrived")
+        guidance.instruction = "Model estimate: the recorded doorway approach is reached. The other room must be recognized before guidance continues; doorway clearance is unknown.";
+      return { route: ["tracking", "arrived"].includes(guidance.status) ? route : null, guidance, target: doorwayTarget };
+    } catch (error) {
+      return { route: null, guidance: unknownGuidance("unavailable", error.message) };
+    }
+  }
   if (!target) return { route: null, guidance: unknownGuidance("no_target", "Choose a saved model destination first.") };
   try {
     const scene = await readGuideScene(config, session);
@@ -230,9 +263,61 @@ export async function computeGuideGuidance(config, session, context, { now = () 
   }
 }
 
+const normalizedLabel = value => String(value || "").normalize("NFKC").toLocaleLowerCase("en").replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+const containsLabel = (text, label) => {
+  const phrase = normalizedLabel(label);
+  return phrase.length > 0 && ` ${normalizedLabel(text)} `.includes(` ${phrase} `);
+};
+
+// Text matches only nominate model records; user confirmation establishes the association.
+export function resolveGuideLocation(memory, scenes, { missingModels = [] } = {}) {
+  const candidates = [];
+  for (const scene of scenes) {
+    const elements = scene.architecture.elements;
+    const anchored = memory.space_id === scene.id
+      ? elements.find(element => element.id === memory.element_id && ["box", "solid", "asset", "rail", "slab"].includes(element.kind)) : undefined;
+    const roomMentioned = containsLabel(memory.content, scene.name);
+    const destinations = elements.filter(element => ["box", "solid", "asset", "rail"].includes(element.kind));
+    const matched = anchored ? [anchored] : destinations.filter(element =>
+      containsLabel(memory.content, element.assembly || element.label));
+    if (!matched.length && roomMentioned)
+      matched.push(...elements.filter(element => element.kind === "slab"));
+    for (const element of matched) {
+      const floors = element.kind === "slab" ? [element] : elements.filter(floor => floor.kind === "slab" && floor.level === element.level);
+      candidates.push({
+        space_id: scene.id, element_id: element.id, space_revision: scene.revision,
+        space_name: scene.name, element_label: element.assembly || element.label || element.id,
+        floor_id: floors.length === 1 ? floors[0].id : null,
+        route_supported: destinations.includes(element) && floors.length === 1,
+        reason: element === anchored ? "saved_anchor" : element.kind === "slab" ? "text_room_match" : "text_container_match",
+      });
+    }
+  }
+  // An explicit room name can disambiguate equal container labels, never an unnamed room.
+  const roomMatches = candidates.filter(candidate => containsLabel(memory.content, candidate.space_name));
+  const anchor = candidates.find(candidate => candidate.reason === "saved_anchor");
+  const relevant = anchor ? [anchor] : roomMatches.length ? roomMatches : candidates;
+  const currentAnchor = anchor && (memory.space_revision ?? memory.linked_revision) === anchor.space_revision;
+  const status = missingModels.length ? "incomplete_evidence"
+    : anchor ? currentAnchor ? "current" : "reconfirmation_required"
+    : relevant.length > 1 ? "ambiguous"
+    : relevant.length === 1 ? "confirmation_required"
+    : memory.space_id ? "missing_anchor" : "missing_evidence";
+  return {
+    memory_id: memory.id, expected_revision: memory.revision, asset_id: memory.asset_id,
+    title: memory.title, content: memory.content, status, candidates: relevant,
+    missing_models: missingModels, confirmation_required: true, saved: false,
+  };
+}
+
 const schemas = {
   list_guide_rooms: z.object({}).strict(),
   read_guide_room: z.object({ map_id: id }).strict(),
+  resolve_guide_location: z.object({ memory_id: z.string().uuid() }).strict(),
+  report_guide_item_observation: z.object({
+    asset_id: z.string().uuid(), description: z.string().trim().min(1).max(500),
+    captured_at: z.number().finite(),
+  }).strict(),
   set_guide_target: z.object({ floor_id: z.string().min(1), target_id: z.string().min(1), asset_id: z.string().uuid().optional() }).strict(),
   rehearse_guide_route: z.object({ floor_id: z.string().min(1), target_id: z.string().min(1), x: z.number().finite().optional(), z: z.number().finite().optional() }).strict()
     .refine(value => (value.x === undefined) === (value.z === undefined), "Supply both virtual X/Z coordinates or neither."),
@@ -240,12 +325,53 @@ const schemas = {
 const descriptions = {
   list_guide_rooms: "List ready structured rooms so the user can identify one by voice. Never assume physical location.",
   read_guide_room: "Read and select a saved room for spoken description and camera tracking. Ask which room if ambiguous.",
+  resolve_guide_location: "Read a saved item's location and current modeled rooms/containers. Return text-match candidates or stale-anchor evidence for explicit user confirmation; never create an anchor or assume physical location.",
+  report_guide_item_observation: "Report an uncertain image-relative visible-item description supported only by this turn's fresh still. Separates it from saved locations without changing memory. Does not prove movement, placement or a spatial link.",
   set_guide_target: "Select an existing model destination and floor without changing geometry or household records. For a saved item/container include its exact asset_id; its saved model link or location memory must match the current room revision. Never guess a household link.",
   rehearse_guide_route: "Calculate an unverified model route estimate in the selected room. Omit X/Z to use fresh aligned tracking, or supply both only from explicit user/companion virtual coordinates. Never invent a start or issue physical walking directions.",
 };
 export const guideTools = Object.entries(schemas).map(([name, schema]) => ({ name, description: descriptions[name], inputSchema: z.toJSONSchema(schema), annotations: { readOnlyHint: true } }));
-export async function callGuideTool(config, session, name, args, { context, home } = {}) {
+export async function callGuideTool(config, session, name, args, { context, home, image, replay, now = () => Date.now() / 1000 } = {}) {
   const values = schemas[name].parse(args);
+  if (name === "resolve_guide_location") {
+    delete session.guideLocationResolution;
+    const memory = home?.memories?.find(value => value.id === values.memory_id);
+    if (!memory || memory.kind !== "location" || !memory.asset_id ||
+        !home.assets?.some(asset => asset.id === memory.asset_id))
+      throw new Error("Choose a saved location attached to an existing household item.");
+    const maps = (await request(config, "/maps")).filter(map => map.status === "ready" && map.options?.engine === "architecture");
+    const missingModels = [];
+    const scenes = (await Promise.all(maps.map(async map => {
+      try {
+        const scene = await request(config, `/maps/${map.id}/scene`);
+        if (scene.mode !== "architecture" || (scene.id !== undefined && scene.id !== map.id) ||
+            !Number.isInteger(scene.revision) || scene.revision < 1 || !Array.isArray(scene.architecture?.elements))
+          throw new Error("Current model evidence unavailable.");
+        return { ...scene, id: map.id };
+      } catch {
+        missingModels.push(map.id);
+        return null;
+      }
+    }))).filter(Boolean);
+    const resolution = resolveGuideLocation(memory, scenes, { missingModels });
+    session.guideLocationResolution = resolution;
+    return resolution;
+  }
+  if (name === "report_guide_item_observation") {
+    const asset = home?.assets?.find(value => value.id === values.asset_id);
+    if (!asset) throw new Error("Choose an existing household item before reporting an observation.");
+    if (!image || image.captured_at !== values.captured_at)
+      throw new Error("A fresh still attached to this turn is required; prior observations cannot be reused.");
+    validateGuideImage({ guide: true, message: "item observation", image }, now());
+    return {
+      asset_id: asset.id, asset_name: asset.name, description: values.description,
+      captured_at: image.captured_at, evidence: replay ? "prerecorded_still" : "current_camera_still",
+      description_source: "model_interpretation", position: "image_relative_only",
+      saved_locations: (home.memories || []).filter(memory => memory.kind === "location" && memory.asset_id === asset.id),
+      movement_verified: false, placement_verified: false, physical_position: "unknown",
+      saved: false, memory_update_requires_user_confirmation: true,
+    };
+  }
   if (name === "list_guide_rooms") return (await request(config, "/maps")).filter(m => m.status === "ready" && m.options?.engine === "architecture").map(m => ({ id: m.id, name: m.name }));
   if (name === "read_guide_room") {
     const scene = await request(config, `/maps/${values.map_id}/scene`);
@@ -273,6 +399,7 @@ export async function callGuideTool(config, session, name, args, { context, home
         throw new Error("This saved household item has no current saved location or model link at that destination. Ask for clarification; do not guess.");
     }
     session.guideTarget = { elementId: element.id, floorId: floor.id, label: element.assembly || element.label, ...(values.asset_id ? { assetId: values.asset_id } : {}) };
+    session.guideDestination = { ...session.guideTarget, mapId: session.guideSpace.id, revision: scene.revision };
     return session.guideTarget;
   }
   let start;

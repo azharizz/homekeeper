@@ -170,6 +170,7 @@ def surface_route(
     blockers,
     eye_y,
     stop_distance,
+    point_goal=None,
 ):
     """Connected constrained triangles retain passages smaller than a raster cell."""
     triangles = list(shapely.constrained_delaunay_triangles(region).geoms)
@@ -213,38 +214,47 @@ def surface_route(
                 costs[other] = candidate
                 previous[other] = (current, portal)
                 heapq.heappush(queue, (candidate, other))
-    # Search near the object's approach, not a far-away viewpoint through a blocked doorway.
-    excluded = target_shape.buffer(stop_distance / math.cos(math.pi / 64), quad_segs=16)
-    candidates = []
-    for i in costs:
-        area = triangles[i].difference(excluded)
-        if area.is_empty:
-            continue
-        point = np.array(nearest_points(area, target_shape)[0].coords[0])
-        gap = target_shape.distance(Point(point))
-        if gap > stop_distance + 0.05:
-            continue
-        cost = costs[i] + math.dist(centers[i], point)
-        candidates.append((gap, cost, i, point))
-    start_gap = target_shape.distance(Point(start))
-    if stop_distance <= start_gap <= stop_distance + 0.05 and costs:
-        candidates.append((start_gap, 0, min(costs, key=costs.get), np.array(start)))
-    # Prefer short approaches within 5 cm of the requested clearance, then the nearest visible surface.
-    candidates.sort(key=lambda c: (max(0, c[0] - stop_distance - 0.05), c[1]))
-    for gap, cost, goal, point in candidates:
-        nearest = nearest_points(Point(point), target_shape)[1]
-        # Visibility across a missing floor or annotated void does not establish arrival.
-        if not support.buffer(1e-9).covers(LineString([point, nearest.coords[0]])):
-            continue
-        aim = surface_aim(
-            np.array([point[0], eye_y, point[1]]), target_triangles, blockers
-        )
-        if aim is not None:
-            break
+    if point_goal is not None:
+        point = np.asarray(point_goal, dtype=float)
+        goals = [i for i in costs if triangles[i].covers(Point(point))]
+        if not goals:
+            raise ValueError("The recorded point has no connected body-clear floor approach.")
+        goal = min(goals, key=lambda i: costs[i] + math.dist(centers[i], point))
+        cost = 0 if math.dist(start, point) < 1e-8 else costs[goal] + math.dist(centers[goal], point)
+        aim = np.array([point[0], eye_y, point[1]])
     else:
-        raise ValueError(
-            "No connected approach can see a surface of this object. Check modeled barriers or choose another destination."
-        )
+        # Search near the object's approach, not a far-away viewpoint through a blocked doorway.
+        excluded = target_shape.buffer(stop_distance / math.cos(math.pi / 64), quad_segs=16)
+        candidates = []
+        for i in costs:
+            area = triangles[i].difference(excluded)
+            if area.is_empty:
+                continue
+            point = np.array(nearest_points(area, target_shape)[0].coords[0])
+            gap = target_shape.distance(Point(point))
+            if gap > stop_distance + 0.05:
+                continue
+            cost = costs[i] + math.dist(centers[i], point)
+            candidates.append((gap, cost, i, point))
+        start_gap = target_shape.distance(Point(start))
+        if stop_distance <= start_gap <= stop_distance + 0.05 and costs:
+            candidates.append((start_gap, 0, min(costs, key=costs.get), np.array(start)))
+        # Prefer short approaches within 5 cm of the requested clearance, then the nearest visible surface.
+        candidates.sort(key=lambda c: (max(0, c[0] - stop_distance - 0.05), c[1]))
+        for gap, cost, goal, point in candidates:
+            nearest = nearest_points(Point(point), target_shape)[1]
+            # Visibility across a missing floor or annotated void does not establish arrival.
+            if not support.buffer(1e-9).covers(LineString([point, nearest.coords[0]])):
+                continue
+            aim = surface_aim(
+                np.array([point[0], eye_y, point[1]]), target_triangles, blockers
+            )
+            if aim is not None:
+                break
+        else:
+            raise ValueError(
+                "No connected approach can see a surface of this object. Check modeled barriers or choose another destination."
+            )
     path = [point.tolist()]
     if cost:
         path.append(centers[goal].tolist())

@@ -151,6 +151,8 @@ export function createAgent(config) {
     "PRAGMA journal_mode=WAL; CREATE TABLE IF NOT EXISTS conversations (id TEXT PRIMARY KEY, data TEXT NOT NULL, updated_at TEXT NOT NULL);",
   );
   const busy = new Set();
+  const roomGenerations = new Map();
+  const roomGeneration = id => roomGenerations.get(id) || 0;
   const configured = () =>
     Boolean(config.model && config.apiKey && config.baseUrl);
   const save = (session) =>
@@ -183,6 +185,25 @@ export function createAgent(config) {
       error: null,
       title: "New conversation",
     };
+    save(session);
+    return session;
+  }
+  function bindGuideRoom(id, room) {
+    if (busy.has(id)) throw new UserError("Wait for the current spoken request before changing rooms.", 409);
+    roomGenerations.set(id, roomGeneration(id) + 1);
+    const session = get(id);
+    if (session.guideSpace?.id !== room.id || session.guideSpace?.revision !== room.revision) {
+      if (session.guideTarget && session.guideSpace && !session.guideDestination)
+        session.guideDestination = { ...session.guideTarget, mapId: session.guideSpace.id, revision: session.guideSpace.revision };
+      delete session.guideTarget;
+    }
+    session.guideSpace = room;
+    if (session.guideDestination?.mapId === room.id && session.guideDestination.revision === room.revision) {
+      const { mapId, revision, ...target } = session.guideDestination;
+      session.guideTarget = target;
+    }
+    session.guide = true;
+    session.readOnly = true;
     save(session);
     return session;
   }
@@ -247,6 +268,7 @@ export function createAgent(config) {
         409,
       );
     busy.add(id);
+    roomGenerations.set(id, roomGeneration(id) + 1);
     const client = new Client({
       name: "HomeKeeper local host",
       version: "1.0.0",
@@ -263,6 +285,7 @@ export function createAgent(config) {
         session.execution = execution || session.execution || "review";
         session.guide = guide;
         session.readOnly = guide || read_only;
+        delete session.guideLocationResolution;
         session.nextSteps = [];
         session.messages.push({ role: "user", content: message });
         if (session.messages.length === 1) session.title = message.slice(0, 80);
@@ -336,12 +359,12 @@ export function createAgent(config) {
             if (session.guide && guideTools.some(tool => tool.name === call.name)) {
               try {
                 let home;
-                if (call.name === "set_guide_target") {
+                if (["set_guide_target", "resolve_guide_location", "report_guide_item_observation"].includes(call.name)) {
                   const snapshot = await client.callTool({ name: "get_home", arguments: {} }, undefined, { timeout: config.mcpTimeout });
                   if (snapshot.isError) throw new Error("Could not read current household locations.");
                   home = snapshot.structuredContent || snapshot;
                 }
-                result = { structuredContent: await callGuideTool(config, session, call.name, call.args, { context: currentContext, home }) };
+                result = { structuredContent: await callGuideTool(config, session, call.name, call.args, { context: currentContext, home, image: currentImage, replay: currentReplay }) };
               } catch (error) {
                 result = { isError: true, content: [{ type: "text", text: error.message }] };
               }
@@ -534,5 +557,5 @@ export function createAgent(config) {
       }
     }
   }
-  return { get, create, list, run, configured, close: () => db.close() };
+  return { get, create, list, run, configured, bindGuideRoom, roomGeneration, close: () => db.close() };
 }

@@ -15,6 +15,7 @@ from . import assets, config, store
 from .api import architecture as architecture_routes
 from .api import assets as asset_routes
 from .api import maps as map_routes
+from .api import recognition as recognition_routes
 
 
 @asynccontextmanager
@@ -59,7 +60,7 @@ async def trust_boundary(request: Request, call_next):
     if (
         request.method == "POST"
         and (
-            request.url.path in {"/api/maps", "/api/assets", "/api/assets/mesh"}
+            request.url.path in {"/api/maps", "/api/assets", "/api/assets/mesh", "/api/recognize"}
             or request.url.path.endswith("/localize")
         )
         and length is None
@@ -125,3 +126,4 @@ def login(body: Login, request: Request):
 app.include_router(map_routes.router)
 app.include_router(architecture_routes.router)
 app.include_router(asset_routes.router)
+app.include_router(recognition_routes.router)

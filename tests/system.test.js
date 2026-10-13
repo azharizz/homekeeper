@@ -1196,6 +1196,52 @@ test("spatial ownership, revisions, anchor editing and invalid inputs", () => {
   }
 });
 
+test("confirmed text-location resolution and stale-anchor reconfirmation preserve reported memory", () => {
+  const directory = mkdtempSync(join(tmpdir(), "homekeeper-location-resolution-"));
+  const store = openStore(join(directory, "home.sqlite"));
+  try {
+    const item = execute(store, "save_home_item", { name: "Keys", category: "Belonging" });
+    const memory = execute(store, "save_memory", {
+      title: "Keys location", content: "Kitchen cabinet, top drawer", kind: "location",
+      asset_id: item.id, source: "User report",
+    });
+    const confirmation = {
+      memory_id: memory.id, expected_revision: memory.revision, space_id: "c".repeat(32),
+      element_id: "cabinet", space_revision: 2, space_name: "Kitchen", element_label: "Cabinet",
+    };
+    assert.equal(tools.resolve_spatial_location, undefined, "AI cannot resolve or reconfirm a model pin");
+    assert.throws(() => execute(store, "resolve_spatial_location", confirmation), /Unknown tool/);
+    for (const invalid of [
+      { asset_id: item.id }, { content: "A guess" }, { expected_revision: undefined },
+      { space_revision: null }, { element_id: null }, { space_name: "" },
+    ]) assert.throws(() => executeUiAction(store, "resolve_spatial_location", { ...confirmation, ...invalid }));
+    const linked = executeUiAction(store, "resolve_spatial_location", confirmation);
+    assert.equal(linked.revision, memory.revision + 1);
+    for (const field of ["asset_id", "title", "content", "kind", "source"])
+      assert.equal(linked[field], memory[field], `Confirmation preserves ${field}`);
+    assert.equal(linked.space_revision, 2);
+    assert.throws(() => executeUiAction(store, "resolve_spatial_location", confirmation), /record changed/);
+    const reconfirmed = executeUiAction(store, "resolve_spatial_location", {
+      ...confirmation, expected_revision: linked.revision, space_revision: 3, element_label: "Renamed cabinet",
+    });
+    assert.equal(reconfirmed.space_revision, 3);
+    assert.equal(reconfirmed.content, memory.content);
+    assert.equal(reconfirmed.source, memory.source);
+    const fact = execute(store, "save_memory", { title: "Preference", content: "Quiet", kind: "preference", source: "User" });
+    assert.throws(() => executeUiAction(store, "resolve_spatial_location", {
+      ...confirmation, memory_id: fact.id, expected_revision: fact.revision,
+    }), /saved location attached/);
+    const unattached = execute(store, "save_memory", { title: "Drawer location", content: "Kitchen", kind: "location", source: "User" });
+    assert.throws(() => executeUiAction(store, "resolve_spatial_location", {
+      ...confirmation, memory_id: unattached.id, expected_revision: unattached.revision,
+    }), /saved location attached/);
+    assert.equal(store.passport(item.id).locations[0].element_label, "Renamed cabinet");
+  } finally {
+    store.close();
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
 for (const hasAnchors of [false, true]) {
 test(`existing SQLite schema (${hasAnchors ? "legacy anchors" : "pre-spatial"}) migrates without data loss`, () => {
   const directory = mkdtempSync(join(tmpdir(), "homekeeper-migration-"));

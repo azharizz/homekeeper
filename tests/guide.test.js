@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { matchMessage } from "../web/guide-status.js";
-import { validateGuideImage, validateGuideContext, callGuideTool, guideTools, nextGuideInstruction, computeGuideGuidance } from "../alexa_host/guide.js";
+import { validateGuideImage, validateGuideContext, callGuideTool, guideTools, nextGuideInstruction, computeGuideGuidance, resolveGuideLocation } from "../alexa_host/guide.js";
 
 test("guide never treats missing, stale or mismatched observations as a current match", () => {
   const match = { status: "localized", map_revision: 2, captured_at: 95, display_position: [1, 2, 3] };
@@ -232,4 +232,82 @@ test("continuous guide uses fresh poses and authoritative targets through mocked
   assert.equal((await computeGuideGuidance({}, session, pose, options)).route, null);
   assert.equal(session.guideTarget, undefined);
   assert.ok(requests.every(entry => entry.url.endsWith("/scene") || entry.url.endsWith("/walkthrough")));
+});
+
+test("location text nominates exact current room/container records without guessing or saving", () => {
+  const scene = { id: "a".repeat(32), name: "Kitchen", revision: 2, architecture: { elements: [
+    { id: "floor", kind: "slab", level: 0, label: "Floor" },
+    { id: "cabinet", kind: "box", level: 0, label: "Cabinet" },
+  ] } };
+  const memory = { id: "11111111-1111-4111-8111-111111111111", revision: 3, asset_id: "22222222-2222-4222-8222-222222222222", title: "Keys", content: "In the Kitchen Cabinet" };
+  const before = JSON.stringify(memory);
+  const resolved = resolveGuideLocation(memory, [scene]);
+  assert.equal(resolved.status, "confirmation_required");
+  assert.equal(resolved.saved, false);
+  assert.deepEqual(resolved.candidates, [{
+    space_id: scene.id, element_id: "cabinet", space_revision: 2, space_name: "Kitchen",
+    element_label: "Cabinet", floor_id: "floor", route_supported: true, reason: "text_container_match",
+  }]);
+  assert.equal(JSON.stringify(memory), before);
+  const other = { ...scene, id: "b".repeat(32), name: "Bedroom" };
+  assert.equal(resolveGuideLocation({ ...memory, content: "In the cabinet" }, [scene, other]).status, "ambiguous");
+  assert.equal(resolveGuideLocation(memory, [scene, other]).candidates.length, 1, "Explicit room, not first room, disambiguates containers");
+  assert.equal(resolveGuideLocation(memory, [{ ...scene, architecture: { elements: [...scene.architecture.elements, { id: "cabinet2", kind: "box", level: 0, label: "Cabinet" }] } }]).status, "ambiguous");
+  assert.equal(resolveGuideLocation({ ...memory, content: "In the Kitchen" }, [scene]).candidates[0].route_supported, false);
+  assert.equal(resolveGuideLocation({ ...memory, content: "In a cabin" }, [scene]).status, "missing_evidence");
+  assert.equal(resolveGuideLocation(memory, [scene], { missingModels: [other.id] }).status, "incomplete_evidence");
+  const anchored = { ...memory, space_id: scene.id, element_id: "cabinet", space_revision: 1 };
+  assert.equal(resolveGuideLocation(anchored, [scene, other]).status, "reconfirmation_required");
+  assert.equal(resolveGuideLocation(anchored, [scene, other]).candidates.length, 1);
+  assert.equal(resolveGuideLocation({ ...anchored, space_revision: 2 }, [scene]).status, "current");
+  assert.equal(resolveGuideLocation({ ...anchored, element_id: "removed", content: "Unknown drawer" }, [scene]).status, "missing_anchor");
+});
+
+test("mocked saved-location resolution reads evidence without selecting or writing a target", async (t) => {
+  const mapId = "a".repeat(32), memoryId = "11111111-1111-4111-8111-111111111111";
+  const assetId = "22222222-2222-4222-8222-222222222222";
+  const scene = { id: mapId, mode: "architecture", name: "Kitchen", revision: 2, architecture: { elements: [
+    { id: "floor", kind: "slab", level: 0, label: "Floor" },
+    { id: "cabinet", kind: "box", level: 0, label: "Cabinet" },
+  ] } };
+  const requests = [];
+  t.mock.method(globalThis, "fetch", async (url, options) => {
+    requests.push({ url, options });
+    return { ok: true, json: async () => url.endsWith("/maps") ? [{ id: mapId, status: "ready", options: { engine: "architecture" } }] : scene };
+  });
+  const home = { assets: [{ id: assetId, name: "Keys" }], memories: [{
+    id: memoryId, revision: 1, asset_id: assetId, kind: "location", title: "Keys", content: "In the kitchen cabinet",
+  }] };
+  const before = JSON.stringify(home), session = {};
+  const resolution = await callGuideTool({}, session, "resolve_guide_location", { memory_id: memoryId }, { home });
+  assert.deepEqual(session.guideLocationResolution, resolution);
+  assert.equal(session.guideTarget, undefined);
+  assert.equal(session.guideSpace, undefined);
+  assert.equal(JSON.stringify(home), before);
+  assert.ok(requests.every(request => request.options.method === "GET"));
+  session.guideSpace = { id: mapId, revision: 2 };
+  await assert.rejects(callGuideTool({}, session, "set_guide_target", { asset_id: assetId, target_id: "cabinet", floor_id: "floor" }, { home }), /no current saved location/);
+  home.memories[0] = { ...home.memories[0], ...resolution.candidates[0] };
+  assert.equal((await callGuideTool({}, session, "set_guide_target", { asset_id: assetId, target_id: "cabinet", floor_id: "floor" }, { home })).assetId, assetId);
+});
+
+test("fresh still item reports remain separate from saved locations, including replay and expiry", async () => {
+  const assetId = "11111111-1111-4111-8111-111111111111";
+  const home = { assets: [{ id: assetId, name: "Keys" }], memories: [{ kind: "location", asset_id: assetId, content: "In the drawer" }] };
+  const image = { data_url: "data:image/jpeg;base64,/9j/4P/Z", captured_at: 100 };
+  const args = { asset_id: assetId, description: "An item resembling the keys is visible beside a cup in this image.", captured_at: 100 };
+  const before = JSON.stringify(home), session = {};
+  const observation = await callGuideTool({}, session, "report_guide_item_observation", args, { home, image, now: () => 100 });
+  assert.equal(observation.evidence, "current_camera_still");
+  assert.equal(observation.saved, false);
+  assert.equal(observation.movement_verified, false);
+  assert.equal(observation.placement_verified, false);
+  assert.deepEqual(observation.saved_locations, home.memories);
+  assert.equal(JSON.stringify(home), before);
+  assert.deepEqual(session, {});
+  assert.equal((await callGuideTool({}, session, "report_guide_item_observation", args, { home, image, replay: { id: "aria-dino" }, now: () => 100 })).evidence, "prerecorded_still");
+  await assert.rejects(callGuideTool({}, session, "report_guide_item_observation", args, { home }), /fresh still/);
+  await assert.rejects(callGuideTool({}, session, "report_guide_item_observation", { ...args, captured_at: 99 }, { home, image }), /fresh still/);
+  await assert.rejects(callGuideTool({}, session, "report_guide_item_observation", args, { home, image, now: () => 111 }), /ten seconds/);
+  await assert.rejects(callGuideTool({}, session, "report_guide_item_observation", args, { home: { ...home, assets: [] }, image }), /existing household item/);
 });

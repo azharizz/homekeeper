@@ -379,6 +379,16 @@ export function openStore(path) {
         a.element_id,
       );
     },
+    resolve_spatial_location(a) {
+      const prior = currentRecord("memories", a.memory_id, a.expected_revision);
+      if (prior.kind !== "location" || !prior.asset_id)
+        throw new UserError("Resolve a saved location attached to an existing home item.");
+      return commands.save_memory({
+        ...prior,
+        ...a,
+        asset_id: prior.asset_id,
+      });
+    },
     save_spatial_location(a) {
       return commands.save_memory(a);
     },

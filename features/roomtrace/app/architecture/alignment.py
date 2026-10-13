@@ -136,8 +136,11 @@ def fit_photos(document, frames, calibration=None, *, failures=None):
                 "Photo alignment references an image outside this capture."
             )
         try:
-            if alignment.calibration is None and calibration:
-                model, params = calibration["model"], calibration["params"]
+            lens = calibration
+            if lens and "cameras" in lens:
+                lens = lens["cameras"].get(alignment.source)
+            if alignment.calibration is None and lens:
+                model, params = lens["model"], lens["params"]
                 if model == "PINHOLE":
                     fx, fy, cx, cy = params
                     distortion = [0] * 5
@@ -150,16 +153,16 @@ def fit_photos(document, frames, calibration=None, *, failures=None):
                     distortion = [*distortion, 0]
                 else:
                     raise ValueError(
-                        f"Capture lens {model} is not supported by architectural OpenCV fitting. Supply exact per-photo calibration."
+                        f"Capture lens {model} is not supported by architectural OpenCV fitting. Supply supported per-photo calibration."
                     )
                 alignment = alignment.model_copy(
                     update={
                         "calibration": PhotoCalibration(
-                            width=calibration["width"],
-                            height=calibration["height"],
+                            width=lens["width"],
+                            height=lens["height"],
                             fx=fx, fy=fy, cx=cx, cy=cy,
                             distortion=distortion,
-                            provenance=f"Supplied capture calibration ({model}); resized to source image.",
+                            provenance=lens.get("provenance", f"Supplied capture calibration ({model}); resized to source image."),
                         )
                     }
                 )

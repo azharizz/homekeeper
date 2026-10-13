@@ -151,7 +151,7 @@ def localize(job_id: str, path: Path, calibration=None, captured_at=None):
         )
     image, _ = decode_image(path)
     gray = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2GRAY)
-    if structured:
+    if structured and index.get("feature_extractor") != "colmap_sift":
         keys, descriptors = cv2.SIFT_create(nfeatures=4000).detectAndCompute(gray, None)
         keypoints = np.array([k.pt for k in keys])
     else:

@@ -20,6 +20,7 @@ from ..architecture.refinement import RefinementRequest
 from ..architecture.structure import StructureEdit
 from ..localization import load_index, localize
 from ..reconstruction import clear_derived, decode_image, reconstruct
+from ..capture_calibration import ScaleReference, read_report
 
 router = APIRouter()
 
@@ -69,6 +70,15 @@ def parse_calibration(value: str | None):
         ) from error
 
 
+def parse_scale_reference(value):
+    if not value:
+        return None
+    try:
+        return ScaleReference.model_validate_json(value).model_dump()
+    except (ValueError, ValidationError) as error:
+        raise HTTPException(422, f"Invalid measured scale reference: {error}") from error
+
+
 def require_job(job_id: str, ready=False):
     try:
         job = store.get_job(job_id)
@@ -90,6 +100,7 @@ async def upload_map(
     name: str = Form("Untitled capture"),
     calibration: str | None = Form(None),
     engine: str = Form("architecture"),
+    scale_reference: str | None = Form(None),
 ):
     if engine not in {"architecture", "mapanything", "colmap"}:
         raise HTTPException(
@@ -125,7 +136,14 @@ async def upload_map(
         "source": "video" if video else "photos",
         "calibration": parse_calibration(calibration),
         "engine": engine,
+        "scale_reference": parse_scale_reference(scale_reference),
     }
+    if options["scale_reference"] and engine != "architecture":
+        raise HTTPException(422, "Capture measured references require the structured architecture option.")
+    if options["scale_reference"] and not video:
+        sources = {f"{index:05d}.jpg" for index in range(len(files))}
+        if not {options["scale_reference"]["source_a"], options["scale_reference"]["source_b"]} <= sources:
+            raise HTTPException(422, "Measured reference sources must name two photos in this capture.")
     if (
         engine == "mapanything"
         and (video or len(files) > 1)
@@ -403,6 +421,9 @@ def capture_evidence(job_id: str):
     return {
         "job": job,
         "frames": json.loads(path.read_text()),
+        "capture_reconstruction": read_report(store.job_dir(job_id)),
+        "scale_reference": job["options"].get("scale_reference"),
+        "calibration_instructions": "Capture reconstruction contains observed multi-view tracks and per-source lens estimates, not model geometry associations. For automatic observed index registration, declare source pixel/model anchors on the same triangulated features: at least four non-coplanar fitting tracks and two held-out check tracks; each photo alignment still needs six fitting observations for camera verification. Check tracks never train the index. Inspect capture_reconstruction.scale/scale_failure for reported measurement resolution; never substitute a guessed scale, crop calibration or nearest-surface position.",
         "architecture_schema": Architecture.model_json_schema(),
         "refinement_schema": RefinementRequest.model_json_schema(),
         "structure_edit_schema": StructureEdit.model_json_schema(),

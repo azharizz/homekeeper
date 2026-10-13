@@ -86,9 +86,11 @@ def publish(job: dict, document: Architecture, expected_revision: int, *, max_er
     from .features import feature_catalog, dimension_report
     from .landmarks import calibrate_scene
     from .schema import PhotoCalibration
+    from ..capture_calibration import read_report
 
     directory = store.job_dir(job["id"])
     frames = json.loads((directory / "frames.json").read_text())
+    capture = read_report(directory)
     names = {frame["name"] for frame in frames}
     for element in document.elements:
         if not set(element.sources) <= names:
@@ -103,7 +105,7 @@ def publish(job: dict, document: Architecture, expected_revision: int, *, max_er
     elements = {item.id: item for item in document.elements}
     calibration_failures = []
     alignments = fit_photos(
-        document, frames, job["options"].get("calibration"),
+        document, frames, job["options"].get("calibration") or capture,
         failures=calibration_failures,
     )
     # Persist genuine resized capture intrinsics so refinement/overlays reuse the same lens.
@@ -204,6 +206,7 @@ def publish(job: dict, document: Architecture, expected_revision: int, *, max_er
             ],
             "photo_alignments": alignments,
             "calibration_failures": calibration_failures,
+            "capture_reconstruction": capture,
             "geometry_checks": checks,
             "measurement_checks": measurements,
             "features": feature_catalog(document),

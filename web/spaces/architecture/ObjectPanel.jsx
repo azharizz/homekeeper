@@ -509,7 +509,7 @@ export default function ObjectPanel({
       </PageList>
       <CopyAction
         text={`Inspect and edit RoomTrace architecture ${scene.id} through MCP. Read the current revision before publishing. Preserve image evidence and explain the changes.`}
-        label="Copy edit request for Codex"
+        label="Copy edit request for Alexa+ Simulate"
       />
     </>
   );

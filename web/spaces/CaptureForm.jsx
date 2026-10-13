@@ -216,7 +216,7 @@ export default function CaptureForm({ health, onCreated }) {
                 onChange={() => setEngine("architecture")}
               />
               <span>
-                1. Structured model<small>Editable rooms · Codex via MCP</small>
+                1. Structured model<small>Editable rooms · Alexa+ Simulate via MCP</small>
               </span>
             </label>
             <label className={engine === "mapanything" ? "active" : ""}>
@@ -294,7 +294,7 @@ export default function CaptureForm({ health, onCreated }) {
         )}
         <p className="capture-expectation">
           {engine === "architecture"
-            ? "Next: copy one request to Codex to build your model."
+            ? "Next: copy one request to your external Alexa+ Simulate modeling conversation."
             : "Reconstruction runs on your server. You can leave and return."}
         </p>
       </form>

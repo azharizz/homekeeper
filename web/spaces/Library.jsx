@@ -75,7 +75,7 @@ export default function Library({ maps, selected, onSelect, onClose }) {
                     {item.status === "ready"
                       ? `${item.summary.total_frames || item.summary.registered_frames || 0} views · ${item.summary.mode === "architecture" ? "Structured model" : "Photo mesh"}`
                       : item.status === "awaiting_agent"
-                        ? "Needs Codex"
+                        ? "Needs Alexa+ Simulate"
                         : item.status}
                   </small>
                 </span>

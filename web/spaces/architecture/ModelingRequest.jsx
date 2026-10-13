@@ -5,8 +5,8 @@ export default function ModelingRequest({ job }) {
     <section className="modeling-request">
       <h2>Your photos are ready.</h2>
       <p>
-        Copy this request into Codex to create the model. This page updates when
-        it is ready.
+        Copy this request to your external Alexa+ Simulate modeling conversation.
+        This page updates when the model is ready.
       </p>
       <CopyAction
         text={`Use RoomTrace MCP to model capture ${job.id} from its own photographs.
@@ -21,7 +21,7 @@ Do not use MapAnything, room presets or hosted generation services. Do not claim
         label="Copy modeling request"
       />
       <p className="hint">
-        Codex runs from your conversation, not automatically from this page.
+        Paste the request yourself. This page does not run it automatically.
       </p>
     </section>
   );

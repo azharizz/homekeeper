@@ -146,8 +146,8 @@ function App({ home, onHomeChanged, onHomeItem, onHomeAction }) {
           <ol>
             <li>Add 4 to 12 overlapping photos or a video.</li>
             <li>
-              For structured models, paste the supplied request into Codex.
-              MapAnything runs on your server.
+              For structured models, copy the supplied request to your external
+              Alexa+ Simulate modeling conversation. MapAnything runs on your server.
             </li>
             <li>
               Explore your model. Use Photos to compare, Objects to edit, and

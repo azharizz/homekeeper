@@ -44,7 +44,7 @@ export default function Observation({ scene, onObservation }) {
     <section className="observation">
       <p className="hint">
         {scene.mode === "architecture" && !scene.localizable
-          ? "Save a view for Codex to compare. Position is not available for this draft."
+          ? "Save a view for Alexa+ Simulate to compare. Position is not available for this draft."
           : "Match a new view to the map's landmarks."}
       </p>
       <Camera
@@ -149,7 +149,10 @@ export default function Observation({ scene, onObservation }) {
         text={`Inspect RoomTrace map ${scene.id}${result ? ` and observation ${result.query_id}` : ""} using MCP. Compare the source images and geometry, and report what is supported or missing.`}
         label="Copy review request"
       />
-      <p className="hint">Paste in Codex. Answers appear there.</p>
+      <p className="hint">
+        Paste the request into your external Alexa+ Simulate modeling conversation.
+        Answers appear there.
+      </p>
       <details>
         <summary>Camera calibration</summary>
         <textarea

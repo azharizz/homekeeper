@@ -525,7 +525,8 @@ export function Conversation({
       )}
       {!status?.model_configured && (
         <p className="connection-note" role="status">
-          Connect Nebius in .env to chat. Saved records remain available.
+          Configure the AI provider in .env to chat. Saved records remain
+          available.
         </p>
       )}
     </main>

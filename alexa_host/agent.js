@@ -105,8 +105,8 @@ export function modelRequest(config, messages, tools) {
             return reject(
               new UserError(
                 hasImage
-                  ? `The camera image request failed (HTTP ${response.statusCode}). NEBIUS_VISION_MODEL must support JPEG images and function calling. Check the configured model, credentials and quota, then capture a fresh photo. No image interpretation was returned.`
-                  : `Nebius returned HTTP ${response.statusCode}. Check the model, credentials and quota in .env, then retry.`,
+                  ? `The camera image request failed (HTTP ${response.statusCode}). The configured vision model must support JPEG images and function calling. Check the model, credentials and quota, then capture a fresh photo. No image interpretation was returned.`
+                  : `The AI provider returned HTTP ${response.statusCode}. Check the model, credentials and quota in .env, then retry.`,
                 502,
               ),
             );
@@ -124,7 +124,7 @@ export function modelRequest(config, messages, tools) {
           } catch {
             reject(
               new UserError(
-                "Nebius returned an unreadable response. Retry the conversation.",
+                "The AI provider returned an unreadable response. Retry the conversation.",
                 502,
               ),
             );
@@ -135,7 +135,7 @@ export function modelRequest(config, messages, tools) {
     request.on("error", () =>
       reject(
         new UserError(
-          "Could not reach Nebius. Check connectivity and NEBIUS_BASE_URL, then retry.",
+          "Could not reach the configured AI provider. Check connectivity and provider configuration, then retry.",
           502,
         ),
       ),
@@ -243,7 +243,7 @@ export function createAgent(config) {
     const currentReplay = validateGuideReplay({ message, decision, retry, guide, image, guide_context, guide_replay });
     if (!configured())
       throw new UserError(
-        "Add NEBIUS_MODEL, NEBIUS_API_KEY and NEBIUS_BASE_URL to project_testing/.env, then recreate the local-host container. Your home records work without the model.",
+        "Configure NEBIUS_MODEL, NEBIUS_API_KEY and NEBIUS_BASE_URL in project_testing/.env, then recreate the local-host container. Your home records work without the AI provider.",
         503,
       );
     if (busy.has(id))

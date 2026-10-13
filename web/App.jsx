@@ -447,8 +447,12 @@ export function App({ initial }) {
                 </p>
                 <p>
                   {status?.model_configured
-                    ? "Nebius agent configured"
-                    : "Nebius needs configuration"}
+                    ? "Alexa+ Simulate configured"
+                    : "Alexa+ Simulate needs setup"}
+                </p>
+                <p className="muted">
+                  Alexa+ Simulate is a prototype label. This local host uses the AI
+                  provider configured in .env, not an Amazon Alexa+ account.
                 </p>
                 <h2>Saving records</h2>
                 <label className="toggle-setting">
@@ -468,13 +472,14 @@ export function App({ initial }) {
                 </p>
                 <h2>Memory & privacy</h2>
                 <p>
-                  Nebius reads the context needed to help. Originals and history
-                  stay in your local Docker volumes.
+                  The configured AI provider reads the context needed to help.
+                  Originals and history stay in your local Docker volumes.
                 </p>
                 <p>
-                  This is a local host. Alexa account access, device control,
-                  bookings, purchases and delivered reminders are not connected.
-                  Browser dictation uses your browser’s speech service.
+                  This is a local host. Amazon Alexa+ account access, device
+                  control, bookings, purchases and delivered reminders are not
+                  connected. Browser dictation uses your browser’s speech
+                  service.
                 </p>
                 <a className="secondary" href="/api/export" download>
                   <Icon name="download" size={17} /> Export home records

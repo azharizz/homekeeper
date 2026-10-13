@@ -28,7 +28,8 @@ export default function PlacementControls({ scene, element, group, objects }) {
       <summary>Move & measure</summary>
       {group.some((item) => item.attachment) && (
         <p className="hint">
-          Attached to its host. Ask Codex to edit its local offsets.
+          Attached to its host. Copy an edit request for Alexa+ Simulate to change
+          its local offsets.
         </p>
       )}
       {movable && (

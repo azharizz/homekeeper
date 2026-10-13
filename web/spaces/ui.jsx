@@ -87,7 +87,7 @@ export function PageList({
   );
 }
 
-export function CopyAction({ text, label = "Copy request for Codex" }) {
+export function CopyAction({ text, label = "Copy request for Alexa+ Simulate" }) {
   const [state, setState] = useState("");
   return (
     <div className="copy-action">
@@ -103,7 +103,7 @@ export function CopyAction({ text, label = "Copy request for Codex" }) {
         }}
       >
         <Icon name={state === "copied" ? "check" : "copy"} />
-        {state === "copied" ? "Copied. Paste into Codex." : label}
+        {state === "copied" ? "Copied. Paste into your external conversation." : label}
       </button>
       {state === "copied" && (
         <span className="sr-only" role="status">

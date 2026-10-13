@@ -1,4 +1,5 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useRef, useState, useSyncExternalStore } from "react";
+import { QueryClient, useQuery } from "@tanstack/react-query";
 
 const endpointKey = endpoint => `${endpoint.element_id}:${endpoint.opening_id}`;
 const freshQuery = (scene, tracking, now) => scene && tracking?.status === "tracking" &&
@@ -7,49 +8,94 @@ const freshQuery = (scene, tracking, now) => scene && tracking?.status === "trac
   Number.isFinite(tracking.queryCapturedAt) && tracking.queryCapturedAt <= now && now - tracking.queryCapturedAt <= 5 &&
   Number.isFinite(tracking.capturedAt) && tracking.capturedAt <= now && now - tracking.capturedAt <= 5;
 
+const candidatesClient = new QueryClient({
+  defaultOptions: {
+    queries: { retry: false, refetchOnWindowFocus: false, gcTime: 0 },
+  },
+});
+let clock = { now: Date.now() / 1000, hiddenVersion: 0 };
+const clockListeners = new Set();
+const readClock = () => clock;
+let clockTimer;
+function publishClock(hiddenVersion = clock.hiddenVersion) {
+  clock = { now: Date.now() / 1000, hiddenVersion };
+  for (const listener of clockListeners) listener();
+}
+function recordVisibility() {
+  if (document.hidden) publishClock(clock.hiddenVersion + 1);
+}
+function subscribeClock(listener) {
+  clockListeners.add(listener);
+  if (clockListeners.size === 1) {
+    clockTimer = setInterval(publishClock, 1000);
+    document.addEventListener("visibilitychange", recordVisibility);
+    publishClock();
+  }
+  return () => {
+    clockListeners.delete(listener);
+    if (!clockListeners.size) {
+      clearInterval(clockTimer);
+      document.removeEventListener("visibilitychange", recordVisibility);
+    }
+  };
+}
+
 export default function GuideConnections({ request, scene, tracking, onMessage }) {
-  const [model, setModel] = useState(null), [opening, setOpening] = useState(""), [floor, setFloor] = useState("");
+  const [opening, setOpening] = useState(""), [floor, setFloor] = useState("");
   const [first, setFirst] = useState(null), [second, setSecond] = useState(null), [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState(""), [now, setNow] = useState(() => Date.now() / 1000);
-  const generation = useRef(0), alive = useRef(true), current = useRef({ scene, tracking });
+  const [message, setMessage] = useState("");
+  const { now, hiddenVersion } = useSyncExternalStore(subscribeClock, readClock);
+  const generation = useRef(0), alive = useRef(false), current = useRef({ scene, tracking });
   current.current = { scene, tracking };
+  const attachPanel = useCallback((node) => {
+    if (!node) return;
+    alive.current = true;
+    return () => { alive.current = false; generation.current++; };
+  }, []);
+  const [selection, setSelection] = useState({
+    request, id: scene?.id, revision: scene?.revision, hiddenVersion, requestVersion: 0,
+  });
+  const changedScene = selection.request !== request || selection.id !== scene?.id || selection.revision !== scene?.revision;
+  const clearPair = selection.hiddenVersion !== hiddenVersion ||
+    (first && ((scene && tracking?.mapId === scene.id && ["stopped", "unsupported"].includes(tracking?.status)) ||
+      (scene?.id === first.ref.map_id && scene.revision !== first.ref.revision)));
+  if (changedScene || clearPair) {
+    generation.current++;
+    setSelection({
+      request, id: scene?.id, revision: scene?.revision, hiddenVersion,
+      requestVersion: selection.requestVersion + (selection.request !== request ? 1 : 0),
+    });
+    if (changedScene) { setOpening(""); setFloor(""); }
+    if (clearPair) setFirst(null);
+    setSecond(null); setBusy(false);
+  }
+  const candidates = useQuery({
+    queryKey: ["connection-endpoints", scene?.id, scene?.revision, selection.requestVersion],
+    enabled: Boolean(scene?.id),
+    queryFn: async ({ signal }) => {
+      const value = await request(`/maps/${scene.id}/connection-endpoints`, { signal });
+      if (value.map_id !== scene.id || value.revision !== scene.revision || !Array.isArray(value.endpoints))
+        throw new Error("Current doorway evidence is unavailable. Refresh the room.");
+      return value;
+    },
+  }, candidatesClient);
+  const model = candidates.data;
+  const [lastCandidateResult, setLastCandidateResult] = useState(null);
+  const candidateResult = candidates.error || model;
+  if (candidateResult && candidateResult !== lastCandidateResult) {
+    setLastCandidateResult(candidateResult);
+    if (candidates.error) setMessage(candidates.error.message);
+    else if (!model.endpoints.length) setMessage(model.reason || "This model has no authored doorway endpoints.");
+  }
   const endpoint = model?.endpoints.find(value => endpointKey(value) === opening);
   const floors = endpoint?.floor_ids || [];
   const fresh = freshQuery(scene, tracking, now);
   const available = model?.map_id === scene?.id && model?.revision === scene?.revision &&
     endpoint && floors.includes(floor) && fresh;
 
-  useEffect(() => {
-    alive.current = true;
-    const timer = setInterval(() => setNow(Date.now() / 1000), 1000);
-    return () => { alive.current = false; generation.current++; clearInterval(timer); };
-  }, []);
-  useEffect(() => {
-    const run = ++generation.current, abort = new AbortController();
-    setModel(null); setOpening(""); setFloor(""); setSecond(null); setBusy(false);
-    if (!scene?.id) return () => abort.abort();
-    request(`/maps/${scene.id}/connection-endpoints`, { signal: abort.signal }).then(value => {
-      if (!alive.current || abort.signal.aborted || generation.current !== run) return;
-      if (value.map_id !== scene.id || value.revision !== scene.revision || !Array.isArray(value.endpoints))
-        throw new Error("Current doorway evidence is unavailable. Refresh the room.");
-      setModel(value);
-      if (!value.endpoints.length) setMessage(value.reason || "This model has no authored doorway endpoints.");
-    }).catch(error => {
-      if (alive.current && !abort.signal.aborted && generation.current === run) setMessage(error.message);
-    });
-    return () => abort.abort();
-  }, [request, scene?.id, scene?.revision]);
-  useEffect(() => {
-    if (first && ((scene && tracking?.mapId === scene.id && ["stopped", "unsupported"].includes(tracking?.status)) ||
-        (scene?.id === first.ref.map_id && scene.revision !== first.ref.revision))) {
-      generation.current++; setFirst(null); setSecond(null); setBusy(false);
-    }
-  }, [tracking?.status, scene?.id, scene?.revision, first]);
-  useEffect(() => {
-    const clear = () => { if (document.hidden) { generation.current++; setFirst(null); setSecond(null); setBusy(false); } };
-    document.addEventListener("visibilitychange", clear);
-    return () => document.removeEventListener("visibilitychange", clear);
-  }, []);
+  function stillCurrent(run, visibilityVersion) {
+    return alive.current && generation.current === run && readClock().hiddenVersion === visibilityVersion;
+  }
 
   function notify(text) { setMessage(text); onMessage?.(text); }
   function recordSide() {
@@ -70,11 +116,11 @@ export default function GuideConnections({ request, scene, tracking, onMessage }
         current.current.scene.id !== second.ref.map_id || current.current.scene.revision !== second.ref.revision) {
       notify("The second room needs fresh matching localization before confirmation."); return;
     }
-    const run = generation.current;
+    const run = generation.current, visibilityVersion = readClock().hiddenVersion;
     setBusy(true);
     try {
       const evidence = await request(`/maps/${first.ref.map_id}/connection-endpoints`);
-      if (generation.current !== run || !alive.current) return;
+      if (!stillCurrent(run, visibilityVersion)) return;
       if (evidence.revision !== first.ref.revision || evidence.map_id !== first.ref.map_id ||
           !evidence.endpoints?.some(value => value.element_id === first.ref.element_id &&
             value.opening_id === first.ref.opening_id && value.floor_ids.includes(first.ref.floor_id))) {
@@ -87,17 +133,17 @@ export default function GuideConnections({ request, scene, tracking, onMessage }
       await request("/room-connections", { method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ a: first.ref, b: second.ref, user_confirmed: true,
           evidence: "explicit user-observed doorway link" }) });
-      if (generation.current !== run || !alive.current) return;
+      if (!stillCurrent(run, visibilityVersion)) return;
       setFirst(null); setSecond(null);
       notify("Doorway association saved from your confirmation and retained camera evidence. Physical crossing and clearance remain unverified.");
     } catch (error) {
-      if (generation.current !== run || !alive.current) return;
+      if (!stillCurrent(run, visibilityVersion)) return;
       if ([404, 409].includes(error.status)) { setFirst(null); setSecond(null); }
       notify(error.message);
-    } finally { if (generation.current === run && alive.current) setBusy(false); }
+    } finally { if (stillCurrent(run, visibilityVersion)) setBusy(false); }
   }
 
-  return <details>
+  return <details ref={attachPanel}>
     <summary>Confirm a connection between rooms</summary>
     <p>Select each authored doorway side only where a fresh localized camera observation is available. Confirming records your observed association, not safe passage.</p>
     <label>Doorway in {scene?.name || "the recognized room"}

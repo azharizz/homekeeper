@@ -1,22 +1,72 @@
-body:has(.voice-guide) { min-width: 0; background: #081c26; }
-.voice-guide { min-height: 100dvh; max-width: 600px; margin: auto; padding: 24px 24px 32px; display: flex; flex-direction: column; align-items: center; color: #effaff; background: #081c26; text-align: center; }
-.guide-home { align-self: flex-start; color: #a8e9fc; padding: 12px 0; }
-.voice-orb { width: 150px; height: 150px; border-radius: 50%; margin: 9vh auto 32px; border: 4px solid #75deff; box-shadow: 0 0 48px #219bc24d, inset 0 0 35px #147f9f70; background: radial-gradient(circle at 35% 30%, #20566d, #0b2636); flex-shrink: 0; }
-.voice-orb.listening { border-color: #b8ffcf; box-shadow: 0 0 55px #5ee79870; }
-.voice-orb.thinking, .voice-orb.matching { border-color: #ffdf9c; }
-.voice-caption { font-size: 22px; line-height: 1.5; max-width: 32ch; max-height: min(25dvh, 8rem); overflow-y: auto; margin: 0 0 32px; }
-.voice-actions { display: flex; gap: 20px; width: 100%; margin-top: auto; }
-.voice-actions button { flex: 1; min-height: 108px; border-radius: 28px; border: 2px solid #81dfff; background: #b8efff; color: #08212e; font: inherit; font-size: 22px; font-weight: 600; cursor: pointer; }
-.voice-actions button:nth-child(2) { background: #163846; color: #e0f7ff; }
-.voice-actions span { display: block; font-size: 28px; }
-.voice-guide :focus-visible { outline: 4px solid #ffdb84; outline-offset: 5px; }
+body:has(.voice-guide) { min-width: 0; background: var(--abyss); }
+body:has(.voice-guide)::before {
+  content: ""; position: fixed; inset: -20%; z-index: -2; pointer-events: none;
+  background:
+    radial-gradient(ellipse 52% 50% at 50% 30%, #0879ba55 0, #164c6738 45%, transparent 72%),
+    radial-gradient(ellipse 40% 34% at 20% 80%, #0f3a4a4d, transparent 78%);
+  animation: currents 38s ease-in-out infinite alternate;
+}
+.voice-guide { position: relative; isolation: isolate; min-height: 100dvh; max-width: 600px; margin: auto; padding: 24px 24px 32px; display: flex; flex-direction: column; align-items: center; color: #fff; text-align: center; }
+.guide-home { align-self: flex-start; display: inline-flex; align-items: center; gap: 9px; padding: 8px 0; color: #28ceef; text-decoration: none; font-size: 21px; font-weight: 500; letter-spacing: -0.03em; }
+.guide-home span { animation: wordmark 0.9s 0.55s var(--ease-out) both; }
+.guide-home:hover .brand-mark { filter: drop-shadow(0 4px 10px #0abeff66); }
+
+/* The orb: an Echo light ring around a breathing core */
+.voice-orb { position: relative; width: 168px; height: 168px; border-radius: 50%; margin: 8vh auto 36px; flex-shrink: 0;
+  display: grid; place-items: center; background: radial-gradient(circle at 50% 38%, #1d3440, #10191e 70%);
+  box-shadow: 0 24px 60px #050f1599, inset 0 1px 0 #ffffff14;
+  animation: settle 1s 0.3s var(--ease-out) both; }
+.voice-orb::before, .voice-orb::after { content: ""; position: absolute; inset: -3px; border-radius: 50%; pointer-events: none;
+  background: conic-gradient(from var(--ring), transparent 0deg, #1a6bff 70deg, #0abeff 140deg, #3ff2c7 180deg, transparent 230deg, transparent 360deg);
+  animation: ring 9s linear infinite; transition: opacity 0.6s; }
+.voice-orb::before { padding: 3px; -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0); opacity: 0.75; }
+.voice-orb::after { z-index: -1; inset: 10px; filter: blur(26px); opacity: 0.4; }
+.voice-core { width: 38%; height: 38%; border-radius: 50%; background: radial-gradient(circle, #e6f8ff 0, #0abeff 38%, #0abeff00 72%);
+  opacity: 0.55; animation: core 4.2s ease-in-out infinite; transition: background 0.5s; }
+.voice-orb[data-state="busy"]::before, .voice-orb[data-state="busy"]::after { animation-duration: 1.4s; }
+.voice-orb[data-state="busy"] .voice-core { animation-duration: 1.2s; }
+.voice-orb[data-state="listening"]::before, .voice-orb[data-state="listening"]::after {
+  background: conic-gradient(from var(--ring), #0abeff, #3ff2c7, #1a6bff, #0abeff); opacity: 1;
+  animation: ring 3s linear infinite, listen 1.1s ease-in-out infinite alternate; }
+.voice-orb.listening .voice-core { background: radial-gradient(circle, #effffa 0, #3ff2c7 40%, #3ff2c700 72%); animation-duration: 1.1s; opacity: 0.9; }
+.voice-orb.speaking .voice-core { animation: speak 0.7s ease-in-out infinite alternate; opacity: 0.9; }
+
+.voice-caption { font-size: 22px; line-height: 1.5; max-width: 32ch; max-height: min(25dvh, 8rem); overflow-y: auto; margin: 0 0 32px; text-wrap: balance; }
+.voice-caption span { display: block; white-space: pre-line; animation: condense 0.7s var(--ease-out) both; }
+
+.voice-actions { display: flex; gap: 16px; width: 100%; margin-top: auto; animation: rise 1s 0.6s var(--ease-out) both; }
+.voice-actions button { position: relative; overflow: hidden; flex: 1; min-height: 112px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
+  border-radius: 30px; border: 1px solid transparent; background: var(--accent); color: #062030; font: inherit; font-size: 20px; font-weight: 500; cursor: pointer;
+  box-shadow: 0 14px 34px #0abeff40; transition: background-color 0.3s, transform 0.3s var(--ease-out), box-shadow 0.4s var(--ease-out), border-color 0.3s; }
+.voice-actions button:hover:not(:disabled) { background: #5fd6ff; transform: translateY(-2px); box-shadow: 0 18px 40px #0abeff59; }
+.voice-actions button:active:not(:disabled) { transform: scale(0.97); }
+.voice-actions button:nth-child(2) { background: #141d22eb; color: #e6f8ff; border-color: #0abeff40; backdrop-filter: blur(12px); box-shadow: 0 14px 34px #050f1580, inset 0 1px 0 #ffffff0d; }
+.voice-actions button:nth-child(2) svg { color: var(--accent); }
+.voice-actions button:nth-child(2):hover:not(:disabled) { background: #1b2a32d9; border-color: #0abeff80; }
+.voice-actions button:disabled { opacity: 0.5; cursor: wait; }
+.voice-guide :focus-visible { outline: 2px solid var(--teal); outline-offset: 5px; }
+
 .guide-camera-preview { width: 100%; }
-.voice-guide video { width: 100%; max-height: 28vh; border-radius: 24px; object-fit: contain; background: #06151d; margin-top: 12px; }
-.guide-camera-preview:has(video:not([hidden])) + .voice-orb { width: 72px; height: 72px; margin: 20px auto; }
-.voice-footnote { font-size: 13px; color: #becfd6; margin: 22px 0 8px; }
-.voice-privacy { font-size: 13px; color: #becfd6; max-width: 45ch; }
-.voice-privacy summary { padding: 12px; cursor: pointer; }
-.voice-privacy p { line-height: 1.6; }
+.voice-guide video { width: 100%; max-height: 28vh; border-radius: 24px; object-fit: contain; background: #0d1418; margin-top: 12px;
+  border: 1px solid #0abeff33; box-shadow: 0 18px 44px #050f1599; animation: condense 0.7s var(--ease-out) both; }
+.guide-camera-preview:has(video:not([hidden])) + .voice-orb { width: 76px; height: 76px; margin: 20px auto; }
+
+.voice-footnote { font-size: 13px; color: #a9c3cf; margin: 22px 0 8px; }
+.voice-footnote:empty { display: none; }
+.guide-demo-link { margin: 18px 0 6px; font-size: 13px; line-height: 1.5; color: var(--muted); }
+.guide-demo-link a, .voice-privacy a { color: var(--link); text-decoration-color: #70d5ff66; }
+.voice-privacy { font-size: 13px; color: var(--muted); max-width: 45ch; }
+.voice-privacy summary { padding: 12px; cursor: pointer; transition: color 0.2s; }
+.voice-privacy summary:hover { color: #fff; }
+.voice-privacy[open] > :not(summary) { animation: rise 0.5s var(--ease-out) both; }
+.voice-privacy p { line-height: 1.6; margin: 0 0 10px; }
+.voice-privacy label { display: flex; gap: 8px; text-align: left; line-height: 1.5; margin-bottom: 10px; }
+.voice-privacy input { accent-color: var(--accent); }
+.voice-privacy button, .guide-calibration-help button, .voice-guide section[aria-label="Confirm saved item location"] button {
+  min-height: 44px; padding: 8px 16px; border-radius: 22px; border: 1px solid #0abeff55; background: #141d22a8; color: #e6f8ff; cursor: pointer; transition: border-color 0.25s, background-color 0.25s; }
+.voice-privacy button:hover, .guide-calibration-help button:hover { border-color: var(--accent); background: #1b2a32; }
+
 .voice-guide-debug { max-width: 1440px; gap: 16px; }
 .voice-guide-debug .voice-orb { width: 56px; height: 56px; margin: 8px auto; }
 .voice-guide-debug .voice-caption { font-size: 18px; max-width: 60ch; margin-bottom: 8px; }
@@ -24,9 +74,12 @@ body:has(.voice-guide) { min-width: 0; background: #081c26; }
 .voice-guide-debug video { max-height: 35vh; width: min(100%, 640px); }
 .guide-debug-selection { display: flex; flex-wrap: wrap; gap: 16px; width: 100%; text-align: left; }
 .guide-debug-selection label { display: grid; gap: 8px; flex: 1; min-width: 240px; }
-.guide-debug-selection select { width: 100%; min-height: 44px; padding: 8px; color: inherit; background: #163846; border: 1px solid #81dfff; border-radius: 8px; }
-.voice-privacy button { min-height: 44px; padding: 8px 16px; border-radius: 8px; }
-.guide-demo-badge { padding: 5px 10px; border: 1px solid #ffdf9c; border-radius: 999px; color: #ffdf9c; font-size: 12px; }
-.guide-demo-link { margin: 10px 0; font-size: 13px; line-height: 1.5; color: #becfd6; }
-.guide-demo-link a, .voice-privacy a { color: #a8e9fc; }
-.voice-actions button:disabled { opacity: 0.5; cursor: wait; }
+.guide-debug-selection select { width: 100%; min-height: 44px; padding: 8px; color: inherit; background: #1b252b; border: 1px solid #0abeff55; border-radius: 10px; }
+
+@keyframes core { 50% { transform: scale(1.18); opacity: 0.8; } }
+@keyframes speak { from { transform: scale(0.9); } to { transform: scale(1.35); } }
+@media (max-width: 720px) {
+  .voice-guide { padding: 16px 16px 24px; }
+  .voice-orb { width: 140px; height: 140px; margin-top: 6vh; }
+  .voice-actions button { min-height: 96px; font-size: 18px; }
+}

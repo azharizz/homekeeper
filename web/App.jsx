@@ -1,4 +1,5 @@
 import React, { lazy, Suspense, useState } from "react";
+import { Ambient } from "./Ambient.jsx";
 import { Conversation } from "./Conversation.jsx";
 import { HomePanel } from "./HomePanel.jsx";
 import {
@@ -14,11 +15,11 @@ import {
 const Spaces = lazy(() => import("./spaces/Spaces.jsx"));
 
 const navigation = [
-  ["items", "book", "Your home"],
-  ["care", "care", "Care & tasks"],
-  ["files", "file", "Files"],
-  ["memory", "memory", "Memory"],
-  ["timeline", "clock", "Home history"],
+  ["items", "tag", "Your home"],
+  ["care", "sprout", "Care & tasks"],
+  ["files", "folio", "Files"],
+  ["memory", "spiral", "Memory"],
+  ["timeline", "rings", "Home history"],
 ];
 
 export function App({ initial }) {
@@ -229,6 +230,20 @@ export function App({ initial }) {
     setPanel(panel === name ? null : name);
     setItemId(null);
   };
+  const slot = !panel
+    ? 0
+    : panel === "chats"
+      ? 1
+      : panel === "spaces"
+        ? 2
+        : 3 + navigation.findIndex(([name]) => name === panel);
+  const records =
+    home.assets.length +
+    home.memories.length +
+    home.tasks.length +
+    home.maintenance.length +
+    home.incidents.length +
+    home.documents.length;
   const title =
     navigation.find(([name]) => name === panel)?.[2] ||
     (panel === "chats" ? "Conversations" : "Settings");
@@ -236,6 +251,10 @@ export function App({ initial }) {
     <div
       className={`app-shell ${panel && panel !== "spaces" ? "panel-open" : ""}`}
     >
+      <Ambient
+        records={records}
+        started={Boolean(session?.messages?.some((m) => m.role !== "tool"))}
+      />
       <a
         className="skip-link"
         href={panel === "spaces" ? "#spaces" : "#message"}
@@ -248,18 +267,27 @@ export function App({ initial }) {
           onClick={() => setPanel(null)}
           aria-label="HomeKeeper home"
         >
-          <Mark />
+          <Mark className="brand-mark" />
           <span>homekeeper</span>
         </button>
         <IconButton
-          name="settings"
+          name="dial"
           label="Settings"
           className="settings-toggle"
           aria-expanded={panel === "settings"}
           onClick={() => togglePanel("settings")}
         />
       </header>
-      <nav className="rail" aria-label="HomeKeeper navigation">
+      <nav
+        className="rail"
+        aria-label="HomeKeeper navigation"
+        style={{ "--bead": `${slot * 51 + (slot > 1 ? 16 : 0)}px` }}
+      >
+        <span
+          className="rail-bead"
+          aria-hidden="true"
+          hidden={panel === "settings"}
+        />
         <button
           className={`rail-button ${!panel ? "active" : ""}`}
           aria-label="Conversation"
@@ -275,7 +303,7 @@ export function App({ initial }) {
           aria-expanded={panel === "chats"}
           onClick={() => togglePanel("chats")}
         >
-          <Icon name="clock" />
+          <Icon name="threads" />
           <span className="tooltip">Conversations</span>
         </button>
         <span className="rail-divider" />
@@ -285,7 +313,7 @@ export function App({ initial }) {
           aria-current={panel === "spaces" ? "page" : undefined}
           onClick={() => togglePanel("spaces")}
         >
-          <Icon name="cube" />
+          <Icon name="scan" />
           <span className="tooltip">Spaces</span>
         </button>
         {navigation.map(([name, icon, label]) => (
@@ -301,7 +329,7 @@ export function App({ initial }) {
           </button>
         ))}
         <a className="rail-button" href="/?view=guide" aria-label="Home Guide">
-          <Icon name="mic" />
+          <Icon name="beacon" />
           <span className="tooltip">Home Guide</span>
         </a>
       </nav>
@@ -318,6 +346,7 @@ export function App({ initial }) {
       )}
       <Conversation
         hidden={panel === "spaces"}
+        memoryCount={records}
         home={home}
         status={status}
         session={session}

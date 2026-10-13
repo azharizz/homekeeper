@@ -1,8 +1,14 @@
 # HomeKeeper desktop interface
 
-The user's explicit Alexa+ reference supersedes the earlier paper/green design. The signed-in Alexa website was inspected through screenshots and rendered styles on 2026-09-20.
+The Alexa+ reference set the palette and type; the 2026-10 revamp keeps both and replaces the flat replica with one world: the home's memory as light in deep water.
 
-Use a #141d22 canvas, a quiet cyan/blue atmospheric glow, white text, #c7c8ca secondary text, #3e4349 controls, and #0abeff active accents. Locally served Alexa Sans Text Dark matches the observed type. The greeting is 32 px and regular weight. The original HomeKeeper house/loop mark uses the same cyan family.
+Palette: #141d22 abyss canvas with a slow drifting cyan/blue current glow, white text, #c7c8ca secondary text, #3e4349 controls, #0abeff bioluminescent accent. Two supporting hues: #3ff2c7 noctiluca teal for live and confirmed states (active rail node, listening, caret, completion) and #1a6bff deep blue inside the light ring. Locally served Alexa Sans Text Dark at two weights. The greeting stays 32 px regular.
+
+Signature motion. A full-viewport canvas (web/Ambient.jsx) draws drifting plankton, plus one brighter lit mote per saved household record, so the field is the real record count; a quiet line under the greeting states that count. Motes brighten and part around the pointer; clicks and sends emit a ripple. A ridgeline tide along the bottom answers the user: idle swell, keystrokes kick it, dictation raises it, work in progress sends a pulse across it. The composer carries an Echo-style conic light ring: slow on focus, fast while working, full-spectrum breathing while listening. The greeting surfaces word by word from blur; the brand mark draws itself in.
+
+Icons are authored in components.jsx: a 1.55 stroke line drawing, and on navigation icons one lit node that glows teal when that view is active (scan corners for Spaces, tag for items, sprout for care, spiral shell for memory, tree rings for history, beacon for Home Guide, dial for settings). A lit bead slides along the rail to the open view. Tooltips wipe out with a clip reveal. Drawers open as a pane of light from the right edge, with their content staggered in.
+
+Timing uses cubic-bezier(0.16, 1, 0.3, 1). Feedback 150 to 300 ms, drawers and ring changes 500 to 600 ms, the first-load sequence about 1.5 s. The canvas pauses when the tab is hidden or Spaces is open, caps device pixel ratio at 1.5 and uses cached glow sprites. Reduced motion renders one still frame, removes the loops and keeps colour and state changes.
 
 The permanent surface is one conversation. A left icon rail opens compact right drawers. Icons have keyboard-accessible labels and visible tooltips. The central pill composer has attachment, dictation and send actions. Suggestion pills execute concrete read-only requests or focus a short draft. After a response, the model may offer up to three complete next requests as buttons. Nothing runs until selected, and existing drafts stay intact. Long chats expose earlier messages on demand. Record lists are paginated; main panels also have search.
 
@@ -10,7 +16,7 @@ Items open a small passport with just identity, relevant care and a chronologica
 
 Review mode is visible near the composer. Requested record changes save directly in direct mode; memory removal and task cancellation require review. A care review is enforced read-only. Failed requests retain draft/progress and offer recovery.
 
-Reference-driven exceptions to the Impeccable catalog: the atmospheric gradient, floating icon rail and pill composer are deliberate Alexa template requirements. Avoid unrelated decorative cards, dashboards, fabricated metrics, excessive headings and dense forms. Motion is limited to the ambient glow, drawer entry and actual working indicator; honor reduced motion. React remains declarative with no useEffect. No mobile-specific redesign is included.
+Reference-driven exceptions to the Impeccable catalog: the atmospheric gradient, floating glass rail and pill composer with light ring are deliberate. Avoid unrelated decorative cards, dashboards, fabricated metrics, excessive headings and dense forms. Motion explains state (focus, working, listening, active view) or belongs to the one authored world; honor reduced motion. React remains declarative with no useEffect; the canvas lifecycle lives in a ref callback cleanup. Below 720 px the rail becomes a bottom dock and drawers fill the screen.
 
 Spaces opens as a native React page below HomeKeeper’s header and beside its shared navigation rail. It fills the available width with a compact New space / Your spaces toolbar, a large model canvas and contextual inspectors. The saved-space library and help use right-side drawers. Styles are scoped to the feature, and fonts come from the shared HomeKeeper assets. The feature lazy-loads only when opened and unmounts on leaving to stop camera capture. Conversation drafts and the selected saved space remain available.
 

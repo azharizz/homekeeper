@@ -1,9 +1,11 @@
-import React, { Suspense, lazy, useEffect, useRef, useState } from "react";
+import React, { Suspense, lazy, useCallback, useRef, useState } from "react";
 import { request } from "./spaces/api";
 import { createGuideTracker } from "./guide-tracking.js";
 import { completeGuideSpeech, replaySourceTime } from "./guide-replay-state.js";
 import { simulationFrame, SIMULATION_CUES } from "./guide-simulation.js";
 import GuideConnections from "./GuideConnections.jsx";
+import { Ambient } from "./Ambient.jsx";
+import { Icon, Mark } from "./components.jsx";
 const GuideDebug = lazy(() => import("./GuideDebug.jsx"));
 import "./guide.css";
 
@@ -25,19 +27,28 @@ export default function HomeGuide() {
   const selectionEpoch = useRef(0);
   const guidanceSpeech = useRef({ key: null, at: 0, voice: null });
   const [locationResolution, setLocationResolution] = useState(null);
-  const [destination, setDestination] = useState(null);
   const [obstacleConsent, setObstacleConsent] = useState(false), [obstacleStatus, setObstacleStatus] = useState("unknown");
   const obstaclePause = useRef(false);
-  useEffect(() => {
-    if (replay || !cameraOn || !obstacleConsent) return;
-    const abort = new AbortController();
-    let timeout;
+  const discoveryPending = useRef(false), discoveryRun = useRef(null), obstacleRun = useRef(null), routeRun = useRef(null);
+  const sceneRequest = useRef(null), referenceRequest = useRef(null), debugRequest = useRef(null);
+  const sceneRef = useRef(null), targetRef = useRef(null), destinationRef = useRef(null), obstacleConsentRef = useRef(false);
+  const replayFrame = useRef(null), latestListen = useRef(null);
+  function cancelRun(ref) {
+    const run = ref.current;
+    ref.current = null;
+    if (run) { run.abort.abort(); clearTimeout(run.timeout); }
+  }
+  function startObstacles() {
+    cancelRun(obstacleRun);
+    if (replay || !cameraActive.current || !obstacleConsentRef.current) return;
+    const run = { abort: new AbortController(), timeout: null };
+    obstacleRun.current = run;
     async function observe() {
       try {
         if (pending.current || document.hidden) return;
         const result = await json("/api/guide-obstacles", { consent: true, image: snapshot() },
-          AbortSignal.any([abort.signal, AbortSignal.timeout(6000)]));
-        if (abort.signal.aborted || !alive.current) return;
+          AbortSignal.any([run.abort.signal, AbortSignal.timeout(6000)]));
+        if (run.abort.signal.aborted || !alive.current) return;
         setObstacleStatus(result.status === "blocked" ? "Visible obstacle reported; clearance unknown" : "unknown");
         if (result.status === "blocked" && !obstaclePause.current) {
           obstaclePause.current = true; routeRef.current = null; setRoute(null);
@@ -45,38 +56,37 @@ export default function HomeGuide() {
           if (!pending.current) { interrupt(); say(result.caution); }
         }
       } catch {
-        if (!abort.signal.aborted) setObstacleStatus("unknown");
+        if (!run.abort.signal.aborted && alive.current) setObstacleStatus("unknown");
       } finally {
-        if (!abort.signal.aborted) timeout = setTimeout(observe, 4000);
+        if (!run.abort.signal.aborted) run.timeout = setTimeout(observe, 4000);
       }
     }
     void observe();
-    return () => { abort.abort(); clearTimeout(timeout); };
-  }, [cameraOn, obstacleConsent]);
-  const discoveryPending = useRef(false);
-  useEffect(() => {
-    if (replay || !cameraOn) return;
-    const abort = new AbortController();
-    let timeout;
+  }
+  function startDiscovery() {
+    cancelRun(discoveryRun);
+    if (replay || !cameraActive.current) return;
+    const run = { abort: new AbortController(), timeout: null };
+    discoveryRun.current = run;
     async function discover() {
+      let ownsPending = false;
       try {
         if (pending.current || discoveryPending.current || trackingRef.current.status === "tracking" || document.hidden) return;
-        discoveryPending.current = true;
+        discoveryPending.current = true; ownsPending = true;
         const selection = selectionEpoch.current;
         const image = snapshot();
         if (!session.current) {
-          const created = await json("/api/conversations", {}, abort.signal);
-          if (abort.signal.aborted) return;
+          const created = await json("/api/conversations", {}, run.abort.signal);
+          if (run.abort.signal.aborted) return;
           session.current = created.id;
         }
         const result = await json(`/api/conversations/${session.current}/recognize`, { image },
-          AbortSignal.any([abort.signal, AbortSignal.timeout(18000)]));
-        if (abort.signal.aborted || !alive.current || selection !== selectionEpoch.current || pending.current) return;
+          AbortSignal.any([run.abort.signal, AbortSignal.timeout(18000)]));
+        if (run.abort.signal.aborted || !alive.current || selection !== selectionEpoch.current || pending.current) return;
         if (result.status === "recognized" && result.guideSpace) {
-          serverRoom.current = result.guideSpace; room.current = result.guideSpace;
-          setSelectedRoom(current => current?.id === result.guideSpace.id && current?.revision === result.guideSpace.revision ? current : result.guideSpace);
-          setTarget(result.guideTarget || null);
-          setDestination(result.guideDestination || null);
+          serverRoom.current = result.guideSpace;
+          selectRoom(result.guideSpace);
+          updateDestination(result.guideTarget || null, result.guideDestination || null);
           setTrackingError("");
           if (!utterance.current) { interrupt(); say(`Camera matched ${result.guideSpace.name}. Model alignment remains an estimate.`); }
         } else {
@@ -84,101 +94,101 @@ export default function HomeGuide() {
           if (!utterance.current) setCaption(result.reason || "I cannot identify this room. Show another view.");
         }
       } catch (error) {
-        if (!abort.signal.aborted && alive.current) setTrackingError(error.message);
+        if (!run.abort.signal.aborted && alive.current) setTrackingError(error.message);
       } finally {
-        discoveryPending.current = false;
-        if (!abort.signal.aborted) timeout = setTimeout(discover, 4000);
+        if (ownsPending) discoveryPending.current = false;
+        if (!run.abort.signal.aborted) run.timeout = setTimeout(discover, 4000);
       }
     }
     void discover();
-    return () => { abort.abort(); clearTimeout(timeout); };
-  }, [cameraOn]);
-  useEffect(() => {
-    if (replay) return;
-    tracker.current = createGuideTracker({ video: video.current, request, onUpdate(value) {
-      if (!alive.current) return;
-      trackingRef.current = value; setTracking(value);
-      if (value.status !== "tracking") { routeRef.current = null; setRoute(null); clearGuidanceSpeech(); }
-      if (value.source === "camera" && cameraActive.current && !stream.current && !xrStarting.current)
-        void acquireCamera().catch(error => setTrackingError(error.message));
-    } });
-    return () => tracker.current?.stop();
-  }, []);
-  useEffect(() => {
-    if (debug) request("/maps").then(maps => setDebugRooms(maps.filter(m => m.status === "ready" && m.options?.engine === "architecture"))).catch(e => setTrackingError(e.message));
-  }, [debug]);
-  useEffect(() => {
-    const selection = ++selectionEpoch.current, abort = new AbortController();
-    async function selectReference() {
-      let id = query.get("space");
-      if (replay) {
-        try {
-          const response = await fetch("/api/guide-replay", { signal: abort.signal }), metadata = await response.json();
-          if (!response.ok) throw new Error(metadata.error || "The replay clip is unavailable.");
-          if (metadata.id !== "aria-dino" || metadata.url !== "/api/guide-replay/aria.mp4" ||
-              metadata.start_seconds !== 79 || metadata.end_seconds !== 83 ||
-              metadata.duration_seconds !== 16 || metadata.source_seconds_per_second !== 0.25 || !/^[a-f0-9]{32}$/.test(metadata.space_id))
-            throw new Error("The replay metadata does not describe the supported slowed 79–83 second clip.");
-          if (!alive.current || abort.signal.aborted) return;
-          setReplayMeta(metadata); setCaption("Tap Camera to start. Talk asks about the current frame.");
-          id = metadata.space_id;
-        } catch (error) {
-          if (alive.current && !abort.signal.aborted) {
-            setReplayError(error.message); setCaption(`Replay unavailable: ${error.message}`);
-          }
-          return;
-        }
-      }
-      if (!id || selection !== selectionEpoch.current) return;
-      if (!/^[a-f0-9]{32}$/.test(id)) { setTrackingError("Invalid reference Space ID."); return; }
+  }
+  async function selectReference(signal) {
+    const selection = ++selectionEpoch.current;
+    let id = query.get("space");
+    if (replay) {
       try {
-        const value = await request(`/maps/${id}/scene`, { signal: abort.signal });
-        if (value.mode !== "architecture") throw new Error("The guide requires a saved structured Space.");
-        if (alive.current && selection === selectionEpoch.current && !abort.signal.aborted)
-          setSelectedRoom({ id, name: value.name, revision: value.revision });
+        const response = await fetch("/api/guide-replay", { signal }), metadata = await response.json();
+        if (!response.ok) throw new Error(metadata.error || "The replay clip is unavailable.");
+        if (metadata.id !== "aria-dino" || metadata.url !== "/api/guide-replay/aria.mp4" ||
+            metadata.start_seconds !== 79 || metadata.end_seconds !== 83 ||
+            metadata.duration_seconds !== 16 || metadata.source_seconds_per_second !== 0.25 || !/^[a-f0-9]{32}$/.test(metadata.space_id))
+          throw new Error("The replay metadata does not describe the supported slowed 79–83 second clip.");
+        if (!alive.current || signal.aborted) return;
+        setReplayMeta(metadata); setCaption("Tap Camera to start. Talk asks about the current frame.");
+        id = metadata.space_id;
       } catch (error) {
-        if (alive.current && !abort.signal.aborted && selection === selectionEpoch.current) setTrackingError(error.message);
+        if (alive.current && !signal.aborted) {
+          setReplayError(error.message); setCaption(`Replay unavailable: ${error.message}`);
+        }
+        return;
       }
     }
-    void selectReference();
-    return () => abort.abort();
-  }, []);
-  useEffect(() => {
-    room.current = selectedRoom; setScene(null); setRoute(null); routeRef.current = null;
-    if (!selectedRoom) return;
-    const abort = new AbortController();
-    request(`/maps/${selectedRoom.id}/scene`, { signal: abort.signal }).then(value => {
-      if (!alive.current || abort.signal.aborted || room.current?.id !== selectedRoom.id || room.current?.revision !== selectedRoom.revision) return;
-      if (value.revision !== selectedRoom.revision) throw new Error("The saved model changed. Select the room again.");
-      setScene(value); setTrackingError("");
-    }).catch(e => { if (alive.current && !abort.signal.aborted) setTrackingError(e.message); });
-    return () => abort.abort();
-  }, [selectedRoom?.id, selectedRoom?.revision]);
-  useEffect(() => {
-    if (!replay) return;
-    let frame;
-    const update = () => {
-      if (video.current) setSimulationTime(video.current.currentTime);
-      frame = requestAnimationFrame(update);
-    };
-    frame = requestAnimationFrame(update);
-    return () => cancelAnimationFrame(frame);
-  }, []);
-  useEffect(() => {
-    if (replay || !cameraOn || !scene || !selectedRoom) return;
-    if (scene.guide_readiness?.ready === false) {
-      setTrackingError(scene.guide_readiness.reasons.join(" "));
-      setCaption("This room needs more calibration evidence before guidance. " + scene.guide_readiness.reasons.join(" "));
+    if (!id || selection !== selectionEpoch.current || signal.aborted) return;
+    if (!/^[a-f0-9]{32}$/.test(id)) { setTrackingError("Invalid reference Space ID."); return; }
+    try {
+      const value = await request(`/maps/${id}/scene`, { signal });
+      if (value.mode !== "architecture") throw new Error("The guide requires a saved structured Space.");
+      if (alive.current && selection === selectionEpoch.current && !signal.aborted)
+        selectRoom({ id, name: value.name, revision: value.revision });
+    } catch (error) {
+      if (alive.current && !signal.aborted && selection === selectionEpoch.current) setTrackingError(error.message);
+    }
+  }
+  function selectRoom(next) {
+    if (room.current?.id === next?.id && room.current?.revision === next?.revision) return;
+    sceneRequest.current?.abort();
+    room.current = next; setSelectedRoom(next);
+    sceneRef.current = null; setScene(null);
+    tracker.current?.stop();
+    restartRoute();
+    if (!next) return;
+    const abort = new AbortController(); sceneRequest.current = abort;
+    request(`/maps/${next.id}/scene`, { signal: abort.signal }).then(value => {
+      if (!alive.current || abort.signal.aborted || room.current?.id !== next.id || room.current?.revision !== next.revision) return;
+      if (value.revision !== next.revision) throw new Error("The saved model changed. Select the room again.");
+      applyScene(value); setTrackingError("");
+    }).catch(error => { if (alive.current && !abort.signal.aborted) setTrackingError(error.message); });
+  }
+  function applyScene(value) {
+    sceneRef.current = value; setScene(value);
+    startTracking(); restartRoute();
+  }
+  function updateDestination(nextTarget, nextDestination) {
+    targetRef.current = nextTarget; destinationRef.current = nextDestination;
+    setTarget(nextTarget);
+    restartRoute();
+  }
+  function startTracking() {
+    const currentScene = sceneRef.current;
+    if (replay || !cameraActive.current || !currentScene || !room.current) return;
+    if (currentScene.guide_readiness?.ready === false) {
+      setTrackingError(currentScene.guide_readiness.reasons.join(" "));
+      setCaption("This room needs more calibration evidence before guidance. " + currentScene.guide_readiness.reasons.join(" "));
       return;
     }
-    tracker.current.start(selectedRoom);
-    return () => tracker.current.stop();
-  }, [cameraOn, scene, selectedRoom?.id, selectedRoom?.revision]);
-  useEffect(() => {
-    if (replay || !cameraOn) { routeRef.current = null; setRoute(null); return; }
-    const id = ++routeEpoch.current, abort = new AbortController();
-    let timeout, initialDistance;
-    guidanceSpeech.current = { key: null, at: 0, voice: null };
+    tracker.current.start(room.current);
+  }
+  function stopReplayFrames() {
+    cancelAnimationFrame(replayFrame.current); replayFrame.current = null;
+  }
+  function startReplayFrames() {
+    stopReplayFrames();
+    const update = () => {
+      if (!alive.current || !video.current || video.current.paused || document.hidden) return;
+      setSimulationTime(video.current.currentTime);
+      replayFrame.current = requestAnimationFrame(update);
+    };
+    update();
+  }
+  function restartRoute() {
+    cancelRun(routeRun); routeEpoch.current++; clearGuidanceSpeech();
+    routeRef.current = null;
+    if (alive.current) setRoute(null);
+    if (replay || !cameraActive.current) return;
+    const scene = sceneRef.current, target = targetRef.current, destination = destinationRef.current;
+    const id = routeEpoch.current, run = { abort: new AbortController(), timeout: null };
+    routeRun.current = run;
+    let initialDistance;
     async function updateRoute() {
       const pose = trackingRef.current;
       try {
@@ -192,19 +202,21 @@ export default function HomeGuide() {
           const result = await json(`/api/conversations/${session.current}/guidance`, {
             guide_context: { map_id: scene.id, revision: scene.revision, status: "tracking", source: pose.source,
               captured_at: pose.capturedAt, position: pose.position, quaternion: pose.quaternion },
-          }, AbortSignal.any([abort.signal, AbortSignal.timeout(5000)]));
+          }, AbortSignal.any([run.abort.signal, AbortSignal.timeout(5000)]));
+          if (run.abort.signal.aborted || !alive.current || id !== routeEpoch.current) return;
           value = result.route; guidance = result.guidance;
           effectiveTarget = result.target || target;
           if (!value) { routeRef.current = null; setRoute(null); clearGuidanceSpeech(); return; }
         } else {
           if (!target) { routeRef.current = null; setRoute(null); clearGuidanceSpeech(); return; }
           value = await request(`/maps/${scene.id}/architecture/walkthrough`, { method: "POST",
-            headers: { "Content-Type": "application/json" }, signal: AbortSignal.any([abort.signal, AbortSignal.timeout(5000)]),
+            headers: { "Content-Type": "application/json" }, signal: AbortSignal.any([run.abort.signal, AbortSignal.timeout(5000)]),
             body: JSON.stringify({ expected_revision: scene.revision, floor_id: target.floorId, target_id: target.elementId, start: [pose.position[0], pose.position[2]] }) });
         }
+        if (run.abort.signal.aborted || !alive.current || id !== routeEpoch.current) return;
         if (obstaclePause.current) { routeRef.current = null; setRoute(null); clearGuidanceSpeech(); return; }
         const current = trackingRef.current;
-        if (id !== routeEpoch.current || current.status !== "tracking" || current.revision !== scene.revision ||
+        if (current.status !== "tracking" || current.revision !== scene.revision ||
             Date.now() / 1000 - current.capturedAt > 3) return;
         if (current.mapId !== scene.id || !effectiveTarget || value.target_id !== effectiveTarget.elementId || value.floor_id !== effectiveTarget.floorId || value.revision !== scene.revision) return;
         if (Math.hypot(...current.position.map((v, axis) => v - pose.position[axis])) > 0.2 ||
@@ -219,17 +231,15 @@ export default function HomeGuide() {
         const key = guidance && `${guidance.status}:${Math.round((guidance.turn_degrees || 0) / 30)}`;
         if (guidance?.instruction && !pending.current && !utterance.current &&
             (key !== guidanceSpeech.current.key || now - guidanceSpeech.current.at >= 12000)) {
-          interrupt();
-          say(guidance.instruction);
+          interrupt(); say(guidance.instruction);
           guidanceSpeech.current = { key, at: now, voice: utterance.current };
         }
       } catch (error) {
-        if (!abort.signal.aborted) { routeRef.current = null; setRoute(null); clearGuidanceSpeech(); setTrackingError(error.message); }
-      } finally { if (!abort.signal.aborted) timeout = setTimeout(updateRoute, 1000); }
+        if (!run.abort.signal.aborted && alive.current) { routeRef.current = null; setRoute(null); clearGuidanceSpeech(); setTrackingError(error.message); }
+      } finally { if (!run.abort.signal.aborted) run.timeout = setTimeout(updateRoute, 1000); }
     }
     void updateRoute();
-    return () => { routeEpoch.current++; clearTimeout(timeout); abort.abort(); clearGuidanceSpeech(); };
-  }, [cameraOn, scene, target, destination]);
+  }
   function clearGuidanceSpeech() {
     const voice = guidanceSpeech.current.voice;
     guidanceSpeech.current = { key: null, at: 0, voice: null };
@@ -240,7 +250,7 @@ export default function HomeGuide() {
   function interrupt() {
     epoch.current++; clearTimeout(timer.current);
     replayRun.current = null;
-    if (replay) video.current?.pause();
+    if (replay) { video.current?.pause(); stopReplayFrames(); }
     recognition.current?.abort(); recognition.current = null;
     if (replay && pending.current) session.current = null;
     pending.current?.abort(); pending.current = null;
@@ -249,6 +259,8 @@ export default function HomeGuide() {
   }
   function closeCamera() {
     cameraActive.current = false; mediaEpoch.current++;
+    cancelRun(discoveryRun); cancelRun(obstacleRun); cancelRun(routeRun);
+    routeEpoch.current++; clearGuidanceSpeech(); stopReplayFrames();
     tracker.current?.stop(); routeRef.current = null;
     if (alive.current) setRoute(null);
     stream.current?.getTracks().forEach(t => t.stop()); stream.current = null;
@@ -261,15 +273,40 @@ export default function HomeGuide() {
     interrupt(); closeCamera();
     if (alive.current) { setPhase("idle"); setCaption(replay ? "Stopped. Replay, AI request, speech and microphone off." : "Stopped. Camera and microphone off."); }
   }
-  useEffect(() => {
-    alive.current = true;
+  // The video owns the tracker, sensors and requests; React 19 detachment disposes them.
+  const attachVideo = useCallback(node => {
+    if (!node) return;
+    video.current = node; alive.current = true;
+    if (!replay) {
+      tracker.current = createGuideTracker({ video: node, request, onUpdate(value) {
+        if (!alive.current) return;
+        trackingRef.current = value; setTracking(value);
+        if (value.status !== "tracking") { routeRef.current = null; setRoute(null); clearGuidanceSpeech(); }
+        if (value.source === "camera" && cameraActive.current && !stream.current && !xrStarting.current)
+          void acquireCamera().catch(error => { if (alive.current) setTrackingError(error.message); });
+      } });
+    }
     const hidden = () => { if (document.hidden) stop(); };
     document.addEventListener("visibilitychange", hidden);
-    return () => { alive.current = false; stop(); document.removeEventListener("visibilitychange", hidden); };
+    const reference = new AbortController(); referenceRequest.current = reference;
+    void selectReference(reference.signal);
+    if (debug) {
+      const abort = new AbortController(); debugRequest.current = abort;
+      request("/maps", { signal: abort.signal }).then(maps => {
+        if (alive.current && !abort.signal.aborted) setDebugRooms(maps.filter(m => m.status === "ready" && m.options?.engine === "architecture"));
+      }).catch(error => { if (alive.current && !abort.signal.aborted) setTrackingError(error.message); });
+    }
+    return () => {
+      alive.current = false; stop();
+      referenceRequest.current?.abort(); sceneRequest.current?.abort(); debugRequest.current?.abort();
+      selectionEpoch.current++;
+      document.removeEventListener("visibilitychange", hidden);
+      tracker.current = null; video.current = null; room.current = null; sceneRef.current = null;
+    };
   }, []);
   function resume(id) {
     if (!alive.current || id !== epoch.current || replayRun.current === id || pending.current) return;
-    if (handsFree.current) timer.current = setTimeout(listen, 250);
+    if (handsFree.current) timer.current = setTimeout(() => latestListen.current?.(), 250);
     else setPhase("idle");
   }
   function say(text, onSpoken) {
@@ -422,12 +459,10 @@ export default function HomeGuide() {
       const chosen = result.guideSpace || null;
       serverRoom.current = chosen;
       if (chosen || !replay) {
-        room.current = chosen; selectionEpoch.current++;
-        setSelectedRoom(current => current?.id === chosen?.id && current?.revision === chosen?.revision ? current : chosen);
+        selectionEpoch.current++; selectRoom(chosen);
       }
-      setTarget(result.guideTarget || null);
+      updateDestination(result.guideTarget || null, result.guideDestination || null);
       setLocationResolution(result.guideLocationResolution || null);
-      setDestination(result.guideDestination || null);
       pending.current = null;
       const answer = result.messages.filter(m => m.role === "assistant" && m.content).at(-1)?.content;
       if (replay && !answer) throw new Error("The AI provider returned no answer. Please try again.");
@@ -457,6 +492,7 @@ export default function HomeGuide() {
       await acquireCamera();
       if (id !== epoch.current) { closeCamera(); return; }
       setCameraOn(true);
+      startTracking(); startDiscovery(); startObstacles(); restartRoute();
       say("Camera ready. With a selected room, camera views will be matched continuously on your home server. Questions also send a photo to the AI; tracking is experimental and does not detect all obstacles.");
     } catch (error) { if (id === epoch.current) { closeCamera(); say(error.message); } }
   }
@@ -535,28 +571,31 @@ export default function HomeGuide() {
     if (!cameraActive.current) void openCamera();
     else { try { void ask("What am I looking at? Describe this still photo briefly without navigation advice.", snapshot()); } catch (error) { say(error.message); } }
   }
-  return <main className={`voice-guide ${debug ? "voice-guide-debug" : ""}`}>
-    <a className="guide-home" href="/" aria-label="Exit Home Guide">HomeKeeper</a>
-    {replay && <span className="guide-demo-badge">Simulation</span>}
+  return <main ref={node => { if (node) latestListen.current = listen; }} className={`voice-guide ${debug ? "voice-guide-debug" : ""}`}>
+    <Ambient />
+    <a className="guide-home" href="/" aria-label="Exit Home Guide"><Mark size={28} className="brand-mark" /><span>homekeeper</span></a>
     {debug && <section className="guide-debug-selection" aria-label="Debug room selection">
       <label>Reference Space <select disabled={replay} aria-label="Debug reference Space" value={selectedRoom?.id || ""} onChange={async event => {
         const id = event.target.value;
         const selection = ++selectionEpoch.current;
         if (replay && pending.current) session.current = null;
-        interrupt(); tracker.current?.stop(); setTarget(null); setSelectedRoom(null); setScene(null); room.current = null; setTrackingError("");
+        referenceRequest.current?.abort();
+        interrupt(); selectRoom(null); updateDestination(null, null); setTrackingError("");
         if (!id) return;
         try {
-          const value = await request(`/maps/${id}/scene`);
+          const abort = new AbortController(); referenceRequest.current = abort;
+          const value = await request(`/maps/${id}/scene`, { signal: abort.signal });
+          if (abort.signal.aborted) return;
           if (value.mode !== "architecture") throw new Error("The guide requires a saved structured Space.");
-          if (alive.current && selection === selectionEpoch.current) setSelectedRoom({ id, name: value.name, revision: value.revision });
-        } catch (error) { if (alive.current && selection === selectionEpoch.current) setTrackingError(error.message); }
+          if (alive.current && selection === selectionEpoch.current) selectRoom({ id, name: value.name, revision: value.revision });
+        } catch (error) { if (alive.current && selection === selectionEpoch.current && !referenceRequest.current?.signal.aborted) setTrackingError(error.message); }
       }}><option value="">{replay ? "Select saved model reference" : "Select saved Space for alignment"}</option>
         {selectedRoom && !debugRooms.some(m => m.id === selectedRoom.id) && <option value={selectedRoom.id}>{selectedRoom.name}</option>}
         {debugRooms.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}</select></label>
       {scene && !replay && <label>Model target <select aria-label="Debug model target" value={target?.elementId || ""} onChange={event => {
         const element = scene.architecture.elements.find(e => e.id === event.target.value);
         const floor = scene.architecture.elements.find(e => e.kind === "slab" && e.level === element?.level);
-        setTarget(element && floor ? { elementId: element.id, floorId: floor.id, label: element.label } : null);
+        updateDestination(element && floor ? { elementId: element.id, floorId: floor.id, label: element.label } : null, destinationRef.current);
       }}><option value="">No target</option>{scene.architecture.elements.filter(e => ["box", "solid", "asset", "rail"].includes(e.kind)).map(e => <option key={e.id} value={e.id}>{e.label}</option>)}</select></label>}
       {scene && !scene.localizable && !replay && <div className="guide-calibration-help">
         <p>Alignment unavailable: this revision has no localization index. It needs at least eight non-coplanar landmarks observed in two calibrated photos.</p>
@@ -566,29 +605,37 @@ export default function HomeGuide() {
             await request(`/maps/${scene.id}/architecture/landmarks`, { method: "POST", headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ expected_revision: scene.revision }) });
             const current = await request(`/maps/${scene.id}/scene`);
-            if (current.id === room.current?.id && current.revision === room.current?.revision) { setScene(current); setTrackingError(""); }
-          } catch (error) { setTrackingError(error.message); }
+            if (alive.current && current.id === room.current?.id && current.revision === room.current?.revision) { applyScene(current); setTrackingError(""); }
+          } catch (error) { if (alive.current && scene.id === room.current?.id && scene.revision === room.current?.revision) setTrackingError(error.message); }
         }}>Build index from saved calibration</button>
       </div>}
       {trackingError && <p role="alert">{trackingError}</p>}
     </section>}
     <div className={debug ? "guide-debug-layout" : "guide-camera-preview"}>
-      <video ref={video} muted playsInline hidden={!cameraOn || (!replay && tracking.source === "webxr")}
+      <video ref={attachVideo} muted playsInline hidden={!cameraOn || (!replay && tracking.source === "webxr")}
         src={replay ? replayMeta?.url : undefined} preload={replay ? "auto" : undefined}
         aria-label={replay ? "Prerecorded demo preview, not a live camera" : "Camera preview"}
         onLoadedData={replay ? () => { if (alive.current) setReplayError(""); } : undefined}
-        onPlay={replay ? () => { if (replayRun.current !== epoch.current || document.hidden) video.current?.pause(); } : undefined}
-        onTimeUpdate={replay ? replayProgress : undefined} onSeeked={replay ? replaySeeked : undefined}
+        onPlay={replay ? () => {
+          if (replayRun.current !== epoch.current || document.hidden) video.current?.pause();
+          else startReplayFrames();
+        } : undefined}
+        onPause={replay ? () => { stopReplayFrames(); if (alive.current && video.current) setSimulationTime(video.current.currentTime); } : undefined}
+        onTimeUpdate={replay ? () => { setSimulationTime(video.current.currentTime); replayProgress(); } : undefined}
+        onSeeked={replay ? () => { setSimulationTime(video.current.currentTime); replaySeeked(); } : undefined}
         onEnded={replay ? replayEnded : undefined} onError={replay ? replayFailed : undefined} />
     {debug && <Suspense fallback={<p>Loading tracking debug view…</p>}><GuideDebug scene={scene} tracking={tracking} target={target} route={route} simulation={simulation} simulated={replay}
       onStartXR={replay ? undefined : startAR}
       onStopTracking={replay ? undefined : () => tracker.current?.stop()} /></Suspense>}
     </div>
-    <div className={`voice-orb ${phase}`} aria-hidden="true" />
-    <p className="voice-caption" role="status" aria-live="polite" aria-atomic="true" tabIndex={0}>{caption}</p>
+    <div className={`voice-orb ${phase}`} aria-hidden="true"
+      data-state={["listening", "speaking"].includes(phase) ? "listening" : ["thinking", "matching", "opening", "playing"].includes(phase) ? "busy" : "idle"}>
+      <span className="voice-core" />
+    </div>
+    <p className="voice-caption" role="status" aria-live="polite" aria-atomic="true" tabIndex={0}><span key={caption}>{caption}</span></p>
     <div className="voice-actions">
-      <button onClick={talk} aria-label={phase === "idle" || (replay && phase === "playing") ? "Talk" : "Stop everything"}><span aria-hidden="true">{phase === "idle" || (replay && phase === "playing") ? "●" : "■"}</span>{phase === "idle" || (replay && phase === "playing") ? "Talk" : "Stop"}</button>
-      <button onClick={camera} disabled={replay && (!replayMeta || !!replayError)} aria-label={cameraOn ? "Camera: describe this view" : "Camera"}><span aria-hidden="true">◎</span>Camera</button>
+      <button onClick={talk} aria-label={phase === "idle" || (replay && phase === "playing") ? "Talk" : "Stop everything"}>{phase === "idle" || (replay && phase === "playing") ? <Icon name="mic" size={28} /> : <Icon name="stop" size={28} />}{phase === "idle" || (replay && phase === "playing") ? "Talk" : "Stop"}</button>
+      <button onClick={camera} disabled={replay && (!replayMeta || !!replayError)} aria-label={cameraOn ? "Camera: describe this view" : "Camera"}><Icon name="lens" size={28} />Camera</button>
     </div>
     {!replay && locationResolution?.candidates?.length > 0 && <section aria-label="Confirm saved item location">
       <p>Confirm where you actually stored {locationResolution.title}. This does not detect the item.</p>
@@ -598,11 +645,13 @@ export default function HomeGuide() {
       </button>)}
     </section>}
     {!replay && <p className="guide-demo-link"><a href="/?view=guide&replay=aria">Try the prerecorded voice demo · no camera</a></p>}
-    <p className="voice-footnote">{replay ? "Scripted simulation · not measured tracking" : <>{cameraOn ? `Tracking: ${tracking.status} · ${tracking.source || "camera"} · ` : ""}Experimental model alignment · Not a verified walking aid</>}</p>
+    <p className="voice-footnote">{replay ? "Scripted simulation · not measured tracking" : cameraOn ? `Tracking: ${tracking.status} · ${tracking.source || "camera"}` : ""}</p>
     {!replay && obstacleConsent && <p role="status">Visible-obstacle observation: {obstacleStatus}. A camera image cannot confirm a clear path.</p>}
     <details className="voice-privacy"><summary>Privacy & help</summary>
       {!replay && cameraOn && <GuideConnections request={request} scene={scene} tracking={tracking} onMessage={say} />}
-      {!replay && <label><input type="checkbox" checked={obstacleConsent} onChange={event => setObstacleConsent(event.target.checked)} />
+      {!replay && <label><input type="checkbox" checked={obstacleConsent} onChange={event => {
+        obstacleConsentRef.current = event.target.checked; setObstacleConsent(event.target.checked); startObstacles();
+      }} />
         Send camera stills to the configured AI provider every few seconds to flag visible obstacles. This cannot detect every hazard or confirm clearance.</label>}
       {replay ? <>
         <p>Camera starts the scripted simulation. Spoken step cues and the authored virtual camera share the video's timeline. Playback pauses for each cue and resumes after speech finishes. These steps and positions are demonstration values, not measured directions. Talk pauses playback for optional AI questions about the visible frame.</p>

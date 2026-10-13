@@ -13,6 +13,7 @@ import "./styles/base.css";
 import "./styles/shell.css";
 import "./styles/model.css";
 import "./styles/walkthrough.css";
+import "./styles/theme.css";
 
 const client = new QueryClient({
   defaultOptions: {

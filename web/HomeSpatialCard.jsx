@@ -1,6 +1,13 @@
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
+import { QueryClient, useQuery } from "@tanstack/react-query";
 import { Icon } from "./components.jsx";
 import { apiUrl, request } from "./spaces/api.js";
+
+const previewClient = new QueryClient({
+  defaultOptions: {
+    queries: { retry: false, refetchOnWindowFocus: false, gcTime: 0 },
+  },
+});
 
 export default function HomeSpatialCard({
   record,
@@ -14,37 +21,31 @@ export default function HomeSpatialCard({
 }) {
   const { space_id: spaceId, element_id: elementId } = record;
   const identity = `${spaceId}:${elementId}:${revision}`;
-  const [preview, setPreview] = useState(null);
-  useEffect(() => {
-    const controller = new AbortController();
-    setPreview(null);
-    if (revision == null) return () => controller.abort();
-    request(`/maps/${encodeURIComponent(spaceId)}/architecture`, {
-      signal: controller.signal,
-    }).then((current) => {
-      if (controller.signal.aborted) return;
-      if (current.revision !== revision) {
-        setPreview({ identity, status: "Model changed · photo hidden" });
-        return;
-      }
+  const [failedPhoto, setFailedPhoto] = useState(null);
+  const preview = useQuery({
+    queryKey: ["home-spatial-preview", spaceId, elementId, revision],
+    enabled: revision != null,
+    queryFn: async ({ signal }) => {
+      const current = await request(`/maps/${encodeURIComponent(spaceId)}/architecture`, { signal });
+      if (current.revision !== revision)
+        return { status: "Model changed · photo hidden" };
       const element = current.document?.elements?.find((item) => item.id === elementId);
       const photo = element?.sources?.[0];
-      setPreview({
-        identity,
+      return {
         status: !element
           ? "Object no longer in model"
           : photo
             ? "Source photo"
             : "No source photo",
         url: photo ? apiUrl(`/maps/${encodeURIComponent(spaceId)}/images/${encodeURIComponent(photo)}`) : null,
-      });
-    }).catch(() => {
-      if (!controller.signal.aborted)
-        setPreview({ identity, status: "Model unavailable · saved link" });
-    });
-    return () => controller.abort();
-  }, [record, spaceId, elementId, revision, identity]);
-  const current = preview?.identity === identity ? preview : null;
+      };
+    },
+  }, previewClient);
+  const current = failedPhoto?.identity === identity && failedPhoto.checkedAt === preview.dataUpdatedAt
+    ? { status: "Photo unavailable · saved link" }
+    : preview.isError
+      ? { status: "Model unavailable · saved link" }
+      : preview.data;
   const status = current?.status || (revision == null ? "Saved link · revision unknown" : "Checking source photo…");
   const storage = kind === "storage";
   return (
@@ -55,7 +56,7 @@ export default function HomeSpatialCard({
             src={current.url}
             alt={`Capture photo supporting ${record.element_label || "the saved model object"}; not a 3D render`}
             loading="lazy"
-            onError={() => setPreview({ identity, status: "Photo unavailable · saved link" })}
+            onError={() => setFailedPhoto({ identity, checkedAt: preview.dataUpdatedAt })}
           />
         ) : (
           <Icon name={storage ? "book" : "cube"} size={25} />

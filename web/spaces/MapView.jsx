@@ -243,7 +243,7 @@ export default function MapView({
           dpr={[1, 1.5]}
           raycaster={{ params: { Points: { threshold: span / 150 } } }}
         >
-          <color attach="background" args={["#172630"]} />
+          <color attach="background" args={["#111a1f"]} />
           <ambientLight intensity={2} />
           {surface && scene.artifacts.includes("surface.glb") ? (
             <Suspense fallback={null}>

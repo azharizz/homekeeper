@@ -1,4 +1,5 @@
 import { Component, useState } from "react";
+import { Icon as HomeIcon } from "../components.jsx";
 
 export function ErrorMessage({ error }) {
   return error ? (
@@ -8,8 +9,10 @@ export function ErrorMessage({ error }) {
   ) : null;
 }
 
-// The outline vocabulary follows the user's Homekeeper interface.
+// Shared names come from the HomeKeeper set; Spaces-only tools keep their own outlines.
+const shared = { cube: "scan", camera: "lens", plus: "plus", arrow: "arrow", back: "back", close: "close", check: "check", search: "search", download: "download" };
 export function Icon({ name, size = 20 }) {
+  if (shared[name]) return <HomeIcon name={shared[name]} size={size} />;
   const paths = {
     cube: "m12 3 9 5v9l-9 5-9-5V8Zm0 10 9-5M3 8l9 5v9",
     plus: "M12 5v14M5 12h14",
@@ -37,7 +40,7 @@ export function Icon({ name, size = 20 }) {
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
-      strokeWidth="1.65"
+      strokeWidth="1.55"
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden="true"

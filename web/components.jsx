@@ -63,10 +63,11 @@ export const blankAsset = {
   notes: "",
 };
 
-export function Mark({ size = 32 }) {
+export function Mark({ size = 32, className }) {
   const id = useId();
   return (
     <svg
+      className={className}
       width={size}
       height={size}
       viewBox="0 0 40 40"
@@ -82,11 +83,14 @@ export function Mark({ size = 32 }) {
           y2="36"
           gradientUnits="userSpaceOnUse"
         >
-          <stop stopColor="#06d9ed" />
-          <stop offset="1" stopColor="#178bff" />
+          <stop stopColor="#3ff2c7" />
+          <stop offset="0.45" stopColor="#0abeff" />
+          <stop offset="1" stopColor="#1a6bff" />
         </linearGradient>
       </defs>
       <path
+        className="mark-roof"
+        pathLength="1"
         d="M7 19 20 7l13 12v10c0 5-4 8-9 8H13c-4 0-7-3-7-7V19"
         stroke={`url(#${id})`}
         strokeWidth="4"
@@ -94,6 +98,8 @@ export function Mark({ size = 32 }) {
         strokeLinejoin="round"
       />
       <path
+        className="mark-door"
+        pathLength="1"
         d="M14 30V19m12 0v11m-12-6h12"
         stroke={`url(#${id})`}
         strokeWidth="3"
@@ -102,47 +108,67 @@ export function Mark({ size = 32 }) {
     </svg>
   );
 }
+// Authored set: a fine line drawing, and on navigation icons one lit node that glows when active.
+const icons = {
+  home: ["M4 11.2 12 4.5l8 6.7v8.3a.9.9 0 0 1-.9.9H4.9a.9.9 0 0 1-.9-.9ZM9.8 20.4v-3.6a2.2 2.2 0 0 1 4.4 0v3.6", [12, 11.6]],
+  threads: ["M3.6 7.2a2.6 2.6 0 0 1 2.6-2.6h8.2a2.6 2.6 0 0 1 2.6 2.6v4.4a2.6 2.6 0 0 1-2.6 2.6H9.6l-3.9 3.1v-3.1h.5a2.6 2.6 0 0 1-2.6-2.6ZM20.4 9.6v5.2a2.4 2.4 0 0 1-2.4 2.4v2.4l-3-2.4h-3.4", [7.6, 9.4]],
+  scan: ["M3.5 8V5a1.5 1.5 0 0 1 1.5-1.5h3M16 3.5h3A1.5 1.5 0 0 1 20.5 5v3M20.5 16v3a1.5 1.5 0 0 1-1.5 1.5h-3M8 20.5H5A1.5 1.5 0 0 1 3.5 19v-3M12 7.2l4.4 2.4v4.8L12 16.8l-4.4-2.4V9.6ZM7.6 9.6 12 12l4.4-2.4M12 12v4.8", [12, 12]],
+  tag: ["M3.9 12.3 11.1 5h7.3a.9.9 0 0 1 .9.9v7.3l-7.2 7.3a1.3 1.3 0 0 1-1.9 0l-6.3-6.3a1.3 1.3 0 0 1 0-1.9Z", [15.6, 8.6]],
+  sprout: ["M12 20.5v-7M12 13.5c0-4.6 3-7.6 8-7.6 0 4.8-3 7.6-8 7.6ZM12 15.6c0-3.6-2.4-6-6.6-6 0 3.8 2.4 6 6.6 6ZM7.5 20.5h9", [16.4, 9.4]],
+  folio: ["M6.5 3.5h7.2l4.8 4.8v11a1.7 1.7 0 0 1-1.7 1.7h-10.3a1.7 1.7 0 0 1-1.7-1.7V5.2a1.7 1.7 0 0 1 1.7-1.7ZM13.5 3.5v5h5M8.5 13h7M8.5 16.5h4.5", [8.6, 8.6]],
+  spiral: ["M12 12a1.5 1.5 0 0 1 3 0 3 3 0 0 1-6 0 4.5 4.5 0 0 1 9 0 6 6 0 0 1-12 0", [13.5, 12]],
+  rings: ["M12 3.2c5 0 8.8 3.8 8.8 8.8s-3.9 8.8-8.8 8.8S3.2 17 3.2 12 7 3.2 12 3.2ZM12 7.4c2.6 0 4.6 2 4.6 4.6s-2 4.6-4.6 4.6-4.6-2-4.6-4.6 2-4.6 4.6-4.6ZM16.6 12l4.2-1.4", [12, 12]],
+  beacon: ["M9.6 20.5 10.8 9h2.4l1.2 11.5M7.5 20.5h9M10.3 9V6.5h3.4V9M12 6.5V5M5 5.2l3 1.6M19 5.2l-3 1.6M4.4 9.6l3.2-.4M19.6 9.6l-3.2-.4", [12, 7.8]],
+  dial: ["M12 6.6a5.4 5.4 0 1 1 0 10.8 5.4 5.4 0 0 1 0-10.8ZM12 2.8v1.6M12 19.6v1.6M2.8 12h1.6M19.6 12h1.6M5.5 5.5l1.1 1.1M17.4 17.4l1.1 1.1M5.5 18.5l1.1-1.1M17.4 6.6l1.1-1.1M12 12l2.2-2.2", [14.4, 9.6]],
+  plus: ["M12 5.5v13M5.5 12h13"],
+  stop: ["M8 7h8a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1Z"],
+  lens: ["M4 8.5A1.5 1.5 0 0 1 5.5 7h2.2l1.5-2.2h5.6L16.3 7h2.2A1.5 1.5 0 0 1 20 8.5v9a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 17.5ZM12 9.4a3.6 3.6 0 1 1 0 7.2 3.6 3.6 0 0 1 0-7.2"],
+  arrow: ["M5 12h13.5M13 6.5l5.5 5.5-5.5 5.5"],
+  back: ["M19 12H5.5M11 6.5 5.5 12l5.5 5.5"],
+  close: ["m6.5 6.5 11 11M6.5 17.5l11-11"],
+  check: ["m5 12.5 4.2 4L19 7"],
+  clock: ["M12 7.5V12l3 2M20.8 12a8.8 8.8 0 1 1-17.6 0 8.8 8.8 0 0 1 17.6 0"],
+  book: ["M4 3h13a3 3 0 0 1 3 3v15H6a3 3 0 0 1-3-3V6a3 3 0 0 1 3-3M3 17h17M8 7h8M8 11h5"],
+  tools: ["m14 6 4 4M5 19l7-7M14 3a6 6 0 0 0-7 7L3 18a2 2 0 0 0 3 3l8-8a6 6 0 0 0 7-7l-4 4-3-3Z"],
+  mic: ["M9.6 6a2.4 2.4 0 0 1 4.8 0v5a2.4 2.4 0 0 1-4.8 0ZM5.6 10.6a6.4 6.4 0 0 0 12.8 0M12 17v3.5M3.4 9v3M20.6 9v3"],
+  send: ["M12 19.5V5.5M6.5 11 12 5.5l5.5 5.5"],
+  file: ["M6.5 3.5h7.2l4.8 4.8v11a1.7 1.7 0 0 1-1.7 1.7h-10.3a1.7 1.7 0 0 1-1.7-1.7V5.2a1.7 1.7 0 0 1 1.7-1.7ZM13.5 3.5v5h5M8.5 13h7M8.5 16.5h4.5"],
+  speaker: ["M4 10.5v3M8 7v10M12 4.5v15M16 8v8M20 10.5v3"],
+  alert: ["M12 3.5 2.8 20h18.4ZM12 9.5v4.5M12 17v.5"],
+  attach: ["M15.6 7.4 9 14a1.8 1.8 0 0 0 2.6 2.6l7-7a3.6 3.6 0 0 0-5.1-5.1l-7 7a5.4 5.4 0 0 0 7.6 7.6L20 13"],
+  care: ["M12 20.5v-7M12 13.5c0-4.6 3-7.6 8-7.6 0 4.8-3 7.6-8 7.6ZM12 15.6c0-3.6-2.4-6-6.6-6 0 3.8 2.4 6 6.6 6ZM7.5 20.5h9"],
+  memory: ["M12 12a1.5 1.5 0 0 1 3 0 3 3 0 0 1-6 0 4.5 4.5 0 0 1 9 0 6 6 0 0 1-12 0"],
+  search: ["M10.5 3.5a7 7 0 1 0 0 14 7 7 0 0 0 0-14M15.5 15.5l5 5"],
+  settings: ["M12 6.6a5.4 5.4 0 1 1 0 10.8 5.4 5.4 0 0 1 0-10.8ZM12 2.8v1.6M12 19.6v1.6M2.8 12h1.6M19.6 12h1.6M12 12l2.2-2.2"],
+  edit: ["M4.5 19.5l4-1 10.6-10.6a2 2 0 0 0-3-3L5.5 15.5ZM14.5 6.5l3 3"],
+  download: ["M12 3.5v11.5M7 10.5l5 5 5-5M4 16.5v2.5A1.5 1.5 0 0 0 5.5 20.5h13a1.5 1.5 0 0 0 1.5-1.5v-2.5"],
+  cube: ["M3.5 8V5a1.5 1.5 0 0 1 1.5-1.5h3M16 3.5h3A1.5 1.5 0 0 1 20.5 5v3M20.5 16v3a1.5 1.5 0 0 1-1.5 1.5h-3M8 20.5H5A1.5 1.5 0 0 1 3.5 19v-3M12 7.2l4.4 2.4v4.8L12 16.8l-4.4-2.4V9.6ZM7.6 9.6 12 12l4.4-2.4M12 12v4.8"],
+};
 export function Icon({ name, size = 20 }) {
-  const paths = {
-    home: "M3 10 12 3l9 7v10h-6v-7H9v7H3Z",
-    plus: "M12 5v14M5 12h14",
-    arrow: "M5 12h14m-6-6 6 6-6 6",
-    back: "M19 12H5m6-6-6 6 6 6",
-    close: "m6 6 12 12M6 18 18 6",
-    check: "m5 12 4 4L19 6",
-    clock: "M12 7v5l3 2M22 12a10 10 0 1 1-20 0 10 10 0 0 1 20 0",
-    book: "M4 3h13a3 3 0 0 1 3 3v15H6a3 3 0 0 1-3-3V6a3 3 0 0 1 3-3M3 17h17M8 7h8M8 11h5",
-    tools:
-      "m14 6 4 4M5 19l7-7M14 3a6 6 0 0 0-7 7L3 18a2 2 0 0 0 3 3l8-8a6 6 0 0 0 7-7l-4 4-3-3Z",
-    mic: "M9 5a3 3 0 0 1 6 0v7a3 3 0 0 1-6 0ZM5 10v2a7 7 0 0 0 14 0v-2M12 19v3M8 22h8",
-    send: "M12 20V4m-6 6 6-6 6 6",
-    file: "M14 2H5v20h14V7ZM14 2v5h5M8 12h8M8 16h8",
-    speaker: "M4 9h4l5-4v14l-5-4H4ZM17 8a6 6 0 0 1 0 8",
-    alert: "M12 3 2 21h20ZM12 9v5M12 17v1",
-    attach: "m9 17 9-9a3 3 0 0 0-4-4L4 14a5 5 0 0 0 7 7L21 11M7 15l9-9",
-    care: "m4 12 4 4 8-9M13 3H3v18h18V11",
-    memory:
-      "M8 3a4 4 0 0 0-4 5 5 5 0 0 0 0 8 4 4 0 0 0 8 3V6a3 3 0 0 0-4-3ZM16 3a4 4 0 0 1 4 5 5 5 0 0 1 0 8 4 4 0 0 1-8 3M7 9h5m0 6h5",
-    search: "M10 3a7 7 0 1 0 0 14 7 7 0 0 0 0-14m5 12 6 6",
-    settings:
-      "M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8M9 3h6l1 3 3 1 2 5-2 5-3 1-1 3H9l-1-3-3-1-2-5 2-5 3-1Z",
-    edit: "m15 4 5 5M4 20l5-1L21 7l-4-4L5 15Z",
-    download: "M12 3v12m-5-5 5 5 5-5M4 16v5h16v-5",
-    cube: "m12 3 9 5v8l-9 5-9-5V8Zm0 10v8M3 8l9 5 9-5M7.5 5.5l9 5",
-  };
+  const [path, node] = icons[name] || icons.book;
   return (
     <svg
+      className="icon"
       width={size}
       height={size}
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
-      strokeWidth="1.65"
+      strokeWidth="1.55"
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden="true"
     >
-      <path d={paths[name] || paths.book} />
+      <path d={path} />
+      {node && (
+        <circle
+          className="icon-node"
+          cx={node[0]}
+          cy={node[1]}
+          r="1.9"
+          stroke="none"
+        />
+      )}
     </svg>
   );
 }

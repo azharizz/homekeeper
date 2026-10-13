@@ -1,5 +1,5 @@
 import { apiUrl } from "../api";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { CopyAction, Icon, PageList } from "../ui";
 import PlacementControls from "./PlacementControls";
 
@@ -27,7 +27,7 @@ export default function ObjectPanel({
   const [maintenanceDue, setMaintenanceDue] = useState("");
   const [maintenanceInterval, setMaintenanceInterval] = useState("");
   const [maintenanceSource, setMaintenanceSource] = useState("");
-  const [locationDetail, setLocationDetail] = useState("");
+  const [locationDraft, setLocationDraft] = useState(null);
   const [working, setWorking] = useState(false);
   const [actionError, setActionError] = useState("");
   const [notice, setNotice] = useState("");
@@ -52,9 +52,12 @@ export default function ObjectPanel({
       memory.space_id === scene.id &&
       memory.element_id === element?.id,
   );
-  useEffect(() => {
-    setLocationDetail(locationMemory?.content || "");
-  }, [element?.id, locationMemory?.content, locationMemory?.id, scene.id, storageItemId]);
+  const locationIdentity = JSON.stringify([
+    scene.id, element?.id, storageItemId, locationMemory?.id, locationMemory?.content,
+  ]);
+  const locationDetail = locationDraft?.identity === locationIdentity
+    ? locationDraft.content : locationMemory?.content || "";
+  if (locationDraft && locationDraft.identity !== locationIdentity) setLocationDraft(null);
   const linkFresh = link?.revision === scene.revision;
   const selectedHomeItem = homeItemId || link?.asset_id || "";
   const filteredObjects = objects.filter((item) =>
@@ -426,7 +429,7 @@ export default function ObjectPanel({
                     aria-label="Storage location detail"
                     placeholder="For example, inside the lower drawer"
                     value={locationDetail}
-                    onChange={(event) => setLocationDetail(event.target.value)}
+                    onChange={(event) => setLocationDraft({ identity: locationIdentity, content: event.target.value })}
                     required
                     maxLength={500}
                   />

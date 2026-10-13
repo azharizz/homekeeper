@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { request } from "./api";
 import { FilePreview, Icon } from "./ui";
@@ -10,16 +10,22 @@ const accept =
 
 function ReferenceView({ files, side }) {
   const [source, setSource] = useState("");
-  const [url, setUrl] = useState("");
+  const [selectedFile, setSelectedFile] = useState(null);
   const [endpoint, setEndpoint] = useState(0);
   const [pixels, setPixels] = useState([["", ""], ["", ""]]);
   const file = files.find((item) => fileKey(item) === source);
-  useEffect(() => {
+  if (selectedFile !== file) {
+    setSelectedFile(file);
     setPixels([["", ""], ["", ""]]);
-    if (!file) { setUrl(""); return; }
-    const next = URL.createObjectURL(file);
-    setUrl(next);
-    return () => URL.revokeObjectURL(next);
+  }
+  const attachPhoto = useCallback((node) => {
+    if (!node || !file) return;
+    const url = URL.createObjectURL(file);
+    node.src = url;
+    return () => {
+      node.removeAttribute("src");
+      URL.revokeObjectURL(url);
+    };
   }, [file]);
   return (
     <div>
@@ -32,14 +38,14 @@ function ReferenceView({ files, side }) {
           ))}
         </select>
       </label>
-      {url && (
+      {file && (
         <>
           <label>Endpoint to mark
             <select value={endpoint} onChange={(event) => setEndpoint(Number(event.target.value))}>
               <option value={0}>A</option><option value={1}>B</option>
             </select>
           </label>
-          <img src={url} alt={`Reference photo ${side + 1}. Tap the selected measured endpoint; coordinates are also editable below.`}
+          <img ref={attachPhoto} alt={`Reference photo ${side + 1}. Tap the selected measured endpoint; coordinates are also editable below.`}
             style={{ width: "100%", height: "auto", display: "block" }}
             onClick={(event) => {
               const rect = event.currentTarget.getBoundingClientRect();

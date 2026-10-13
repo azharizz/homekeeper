@@ -7,9 +7,11 @@ import {
   MessageText,
   PageList,
 } from "./components.jsx";
+import { kick, stirFrom } from "./Ambient.jsx";
 
 export function Conversation({
   hidden,
+  memoryCount = 0,
   home,
   status,
   session,
@@ -65,6 +67,7 @@ export function Conversation({
   function submit() {
     if (blocked || (!draft.trim() && !attachments.length)) return;
     if (listening) recognition.current?.stop();
+    stirFrom(document.querySelector(".composer"), 1);
     const text =
       draft.trim() ||
       "Read this document and file it with the right item in my home. Add the item if needed, using only supported facts.";
@@ -122,7 +125,21 @@ export function Conversation({
       )}
       {!hasMessages && (
         <div className="conversation-intro">
-          <h1>What can I take care of?</h1>
+          <h1>
+            {"What can I take care of?".split(" ").map((word, i) => (
+              <React.Fragment key={i}>
+                {i > 0 && " "}
+                <span className="word" style={{ "--i": i }}>
+                  {word}
+                </span>
+              </React.Fragment>
+            ))}
+          </h1>
+          <p className="memory-count">
+            {memoryCount
+              ? `Remembering ${memoryCount} ${memoryCount === 1 ? "thing" : "things"} about your home`
+              : "Tell me one thing about your home to begin"}
+          </p>
         </div>
       )}
       {hasMessages && (
@@ -219,6 +236,7 @@ export function Conversation({
                 {session.nextSteps.map((action, index) => (
                   <button
                     key={index}
+                    style={{ "--i": index }}
                     className="secondary"
                     disabled={blocked}
                     onClick={() => onSend({ message: action })}
@@ -408,6 +426,7 @@ export function Conversation({
         )}
         <form
           className="composer"
+          data-state={listening ? "listening" : busy ? "busy" : "idle"}
           onSubmit={(e) => {
             e.preventDefault();
             submit();
@@ -425,7 +444,10 @@ export function Conversation({
                 : "Ask anything about your home"
             }
             value={draft}
-            onChange={(e) => setDraft(e.target.value)}
+            onChange={(e) => {
+              setDraft(e.target.value);
+              kick(0.12);
+            }}
             onKeyDown={(e) => {
               if (
                 e.key === "Enter" &&
@@ -499,6 +521,7 @@ export function Conversation({
       {!hasMessages && !attachments.length && (
         <div className="suggestions" aria-label="Conversation ideas">
           <button
+            style={{ "--i": 0 }}
             disabled={blocked}
             onClick={() =>
               onAsk(careRequest, { immediate: true, readOnly: true })
@@ -508,6 +531,7 @@ export function Conversation({
             <Icon name="arrow" size={14} />
           </button>
           <button
+            style={{ "--i": 1 }}
             disabled={blocked}
             onClick={() => setDraft("Something at home needs fixing: ")}
           >
@@ -515,6 +539,7 @@ export function Conversation({
             <Icon name="arrow" size={14} />
           </button>
           <button
+            style={{ "--i": 2 }}
             disabled={blocked}
             onClick={() => setDraft("Remember this about my home: ")}
           >

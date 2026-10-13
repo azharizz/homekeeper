@@ -1,7 +1,7 @@
-import { Component, Suspense, useCallback, useEffect, useState } from "react";
+import { Component, Suspense, useCallback, useMemo, useState, useSyncExternalStore } from "react";
 import { Canvas, useThree } from "@react-three/fiber";
-import { Line, PerspectiveCamera, useGLTF } from "@react-three/drei";
-import { ArchitectureMesh, FittedCamera, revisionURL } from "./spaces/architecture/Scene";
+import { Line, PerspectiveCamera } from "@react-three/drei";
+import { ArchitectureMesh, FittedCamera } from "./spaces/architecture/Scene";
 import { currentGuidePose, currentGuideRoute } from "./guide-debug-state.js";
 import "./guide-debug.css";
 
@@ -23,17 +23,42 @@ const readOnlySelection = () => null;
 const frustumCorners = [[-0.5, -0.33, -0.6], [0.5, -0.33, -0.6], [0.5, 0.33, -0.6], [-0.5, 0.33, -0.6]];
 const frustumLines = [frustumCorners[0], frustumCorners[1], frustumCorners[2], frustumCorners[3], frustumCorners[0], [0, 0, 0], frustumCorners[1], [0, 0, 0], frustumCorners[2], [0, 0, 0], frustumCorners[3]];
 
+function createPoseClock(trackingActive) {
+  let snapshot = { now: Date.now() / 1000, hidden: document.hidden };
+  return {
+    getSnapshot: () => snapshot,
+    subscribe(notify) {
+      let timer = null;
+      const update = () => {
+        snapshot = { now: Date.now() / 1000, hidden: document.hidden };
+        notify();
+      };
+      const visibilityChanged = () => {
+        clearInterval(timer);
+        timer = trackingActive && !document.hidden ? setInterval(update, 250) : null;
+        update();
+      };
+      document.addEventListener("visibilitychange", visibilityChanged);
+      visibilityChanged();
+      return () => {
+        clearInterval(timer);
+        document.removeEventListener("visibilitychange", visibilityChanged);
+      };
+    },
+  };
+}
+
 function DebugModel({ scene, level, cutaway, selected, onLoaded }) {
-  useGLTF(revisionURL(scene, "surface.glb"));
   const invalidate = useThree(state => state.invalidate);
-  useEffect(() => {
+  const modelRef = useCallback((model) => {
+    if (!model) return;
+    // This group commits only after ArchitectureMesh's GLB loader resolves.
     onLoaded();
     invalidate();
-    // Camera and OrbitControls finish their mount effects before this draw.
     const frame = requestAnimationFrame(invalidate);
     return () => cancelAnimationFrame(frame);
   }, [scene, level, cutaway, selected, onLoaded, invalidate]);
-  return <ArchitectureMesh scene={scene} level={level} cutaway={cutaway} selected={selected} onSelect={readOnlySelection} />;
+  return <group ref={modelRef}><ArchitectureMesh scene={scene} level={level} cutaway={cutaway} selected={selected} onSelect={readOnlySelection} /></group>;
 }
 
 function DebugPath({ route, target, span }) {
@@ -65,17 +90,11 @@ function PhoneFrustum({ pose, span }) {
 
 export default function GuideDebug({ scene, tracking, target, route, onStartXR, onStopTracking, simulation, simulated = false }) {
   const [view, setView] = useState("pov");
-  const [clock, setClock] = useState(() => ({ now: Date.now() / 1000, hidden: document.hidden }));
+  const poseClock = useMemo(() => createPoseClock(!simulated && tracking?.status === "tracking"), [simulated, tracking?.status]);
+  const clock = useSyncExternalStore(poseClock.subscribe, poseClock.getSnapshot);
   const [loadedModel, setLoadedModel] = useState(null);
   const modelKey = scene ? `${scene.id}:${scene.revision}:${scene.artifact_revision}` : null;
   const onModelLoaded = useCallback(() => setLoadedModel(modelKey), [modelKey]);
-  useEffect(() => {
-    const update = () => setClock({ now: Date.now() / 1000, hidden: document.hidden });
-    update();
-    const timer = tracking?.status === "tracking" ? setInterval(update, 250) : null;
-    document.addEventListener("visibilitychange", update);
-    return () => { clearInterval(timer); document.removeEventListener("visibilitychange", update); };
-  }, [tracking?.status]);
   const now = Math.max(clock.now, Date.now() / 1000);
   const pose = simulated ? simulation : currentGuidePose(tracking, scene, now, clock.hidden);
   const currentRoute = simulated ? null : currentGuideRoute(route, scene, target);

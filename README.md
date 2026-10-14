@@ -23,7 +23,7 @@
     <img src="https://img.shields.io/badge/agent-MCP%20tools-0ABEFF.svg" alt="MCP tools">
     <img src="https://img.shields.io/badge/memory-SQLite-1A6BFF.svg" alt="SQLite">
     <img src="https://img.shields.io/badge/geometry-COLMAP%20%2B%20Open3D-28CEEF.svg" alt="COLMAP and Open3D">
-    <img src="https://img.shields.io/badge/model-Nebius%20%C2%B7%20OpenAI--compatible-A9C3CF.svg" alt="Nebius, OpenAI-compatible">
+    <img src="https://img.shields.io/badge/agent-Alexa%2B%20Simulate-A9C3CF.svg" alt="Alexa+ Simulate agent">
     <img src="https://img.shields.io/badge/runs-local%20Docker%20Compose-2496ED.svg" alt="Local Docker Compose">
   </p>
   <p>
@@ -37,7 +37,7 @@
 </div>
 
 > [!IMPORTANT]
-> HomeKeeper runs as one trusted household on your own machine. Its assistant is labelled **Alexa+ Simulate**: our own agent, built so the same MCP tools can plug into a real Alexa+ add-on later. It is not a live Alexa+ integration. 3D models, measurements and walking steps are **estimates**, and the Home Guide is **not a verified walking aid** (see [Truth boundaries](#truth-boundaries)).
+> HomeKeeper runs as one trusted household on your own machine. Its assistant is labelled **Alexa+ Simulate**: our own agent, built so the same MCP tools can plug into a real Alexa+ add-on later. It is not a live Alexa+ integration. 3D models, measurements and walking steps are **estimates** (see [Truth boundaries](#truth-boundaries)).
 
 <details>
 <summary><kbd>Contents</kbd></summary>
@@ -222,7 +222,7 @@ Every screenshot is a frame from a screen recording of the real app running loca
 ```text
 React browser (Conversation · Spaces · Home Guide)
   -> alexa_host/server.js        localhost, origin/host checks, NDJSON streaming
-      -> agent.js -> model provider (Nebius, OpenAI-compatible) -> MCP client
+      -> agent.js (Alexa+ Simulate agent) -> MCP client
                                     -> capability/server.js -> tools.js -> store.js -> SQLite
       -> /roomtrace/api/          -> RoomTrace (Python FastAPI): captures, geometry, GLB
   Codex conversation -> features/roomtrace/app/mcp_server.py -> structured modeling
@@ -235,7 +235,7 @@ React browser (Conversation · Spaces · Home Guide)
 | **Node.js 24 · Express** | `alexa_host/`: the local conversation host, agent loop, guide endpoints and RoomTrace gateway. |
 | **Model Context Protocol** | The official MCP SDK over Streamable HTTP between the agent and the capability server; RoomTrace exposes its own MCP tools for modeling. |
 | **SQLite** | `capability/`: transactions, uploaded originals, page text, history and export. |
-| **Nebius (OpenAI-compatible)** | Reasoning and tool choice; a vision model (`NEBIUS_VISION_MODEL`) for camera stills. No model is hardcoded. |
+| **Alexa+ Simulate agent** | Reasoning and tool choice, plus vision for Home Guide camera stills. The agent model is configured in `.env`; none is hardcoded. |
 | **Python · FastAPI · COLMAP · Open3D** | `features/roomtrace/`: uploads, calibration, structured geometry, localization and walkthroughs. |
 | **Docker Compose** | Three services, non-root, read-only filesystems, dropped capabilities, loopback-only ports. |
 
@@ -246,13 +246,13 @@ Requires Docker Compose, and Node.js 24 for setup and checks.
 ```sh
 npm ci
 npm run setup
-# Edit .env privately and add your NEBIUS_API_KEY, NEBIUS_BASE_URL and NEBIUS_MODEL.
+# Edit .env privately and add the Alexa+ Simulate agent settings that setup lists.
 docker compose up --build -d
 ```
 
 Open **http://localhost:8789**. Spaces is in the left rail; the Home Guide is the beacon icon, or `/?view=guide`. The capability MCP endpoint is `http://localhost:8788/mcp` and requires the generated `HOMEKEEPER_TOKEN`. Both ports bind to loopback only; RoomTrace stays inside the Compose network.
 
-`NEBIUS_BASE_URL` must be the OpenAI-compatible API root ending at `/v1`, and `NEBIUS_MODEL` a model that supports function calling. Home records and forms work without a model; the conversation shows that configuration is missing instead of pretending. After changing `.env`, run `docker compose up -d --force-recreate local-host`.
+The agent model must support function calling. Home records and forms work without a model; the conversation shows that configuration is missing instead of pretending. After changing `.env`, run `docker compose up -d --force-recreate local-host`.
 
 <details>
 <summary><strong>Native (no Docker)</strong></summary>
@@ -293,7 +293,7 @@ npm test                 # node --test tests/*.test.js
 npm run build
 npm run check:browser
 npm run check:roomtrace
-npm run check:live       # needs real Nebius credentials; uses an isolated temporary home
+npm run check:live       # needs real agent credentials; uses an isolated temporary home
 ```
 
 The system suite covers authenticated intake, original-file preservation, atomic filing, care-plan revisions and export; the permission check asserts that read-only reviews cannot write. The live check exercises model-selected writes, rejection, approval, corrections, routines, restart recall, document reads, repair history and conversation search. Results and history are in [VERIFICATION.md](VERIFICATION.md).
@@ -319,7 +319,6 @@ docker compose start
 
 - **Alexa+ Simulate is our own agent.** No Echo device, Amazon account, Alexa+ add-on, booking company or payment processor is connected. The capability server’s MCP tools are designed to be the integration surface when real Alexa+ access exists.
 - **Geometry is an estimate.** Models, dimensions and step counts come from photos and authored structure, not sensors. A model anchor is not live item tracking: HomeKeeper cannot detect that something moved.
-- **The Home Guide is experimental and not a verified walking aid.** It cannot detect every obstacle, step or drop-off, and it needs on-device evaluation with blind participants and mobility specialists before any real mobility use. The Aria replay is a scripted simulation.
 - **One trusted household, locally.** There are no multi-user accounts or encryption-at-rest claims. Public use needs identity, authorization, HTTPS and real platform onboarding; do not tunnel this server publicly.
 - **No invented data.** The app ships no sample home and no provider mocks. Dates, costs and locations come from the household.
 

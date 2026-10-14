@@ -1,86 +1,261 @@
-# HomeKeeper
+<p align="center">
+  <img src="submission/assets/homekeeper-banner.png" alt="homekeeper: Tell it once. Your home remembers. A household memory mapped onto a 3D model of your home, with a voice guide." width="100%">
+</p>
 
-A whole-home agent with persistent household memory. One conversation for belongings, shopping, chores, preferences, documents and repair history, backed by real Nebius reasoning and MCP tools.
+<div align="center">
+  <h1>HomeKeeper</h1>
+  <p><strong>A household memory for every thing you own, mapped onto a 3D model of your home, with a voice guide that can talk you to it.</strong></p>
+  <p><em>Tell it once. Your home remembers.</em></p>
+  <p>
+    <a href="submission/submission-description.md"><img src="https://img.shields.io/badge/SUBMISSION%20DESCRIPTION-0ABEFF?style=for-the-badge&logoColor=white" alt="Read the submission description"></a>
+    <img src="https://img.shields.io/badge/ALEXA%2B%20SIMULATE-141D22?style=for-the-badge" alt="Alexa+ Simulate agent">
+    <img src="https://img.shields.io/badge/3D%20SPACES%20FROM%20PHOTOS-3FF2C7?style=for-the-badge&logoColor=062030" alt="3D Spaces from photos">
+  </p>
+  <p>
+    <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-3FF2C7.svg" alt="Apache 2.0 license"></a>
+    <img src="https://img.shields.io/badge/React-19.3-61DAFB.svg" alt="React 19.3">
+    <img src="https://img.shields.io/badge/Vite-8.3-646CFF.svg" alt="Vite 8.3">
+    <img src="https://img.shields.io/badge/three.js-0.180-0ABEFF.svg" alt="three.js 0.180">
+    <img src="https://img.shields.io/badge/Node.js-24-5FA04E.svg" alt="Node.js 24">
+    <img src="https://img.shields.io/badge/Python-FastAPI-009688.svg" alt="Python FastAPI">
+  </p>
+  <p>
+    <img src="https://img.shields.io/badge/agent-MCP%20tools-0ABEFF.svg" alt="MCP tools">
+    <img src="https://img.shields.io/badge/memory-SQLite-1A6BFF.svg" alt="SQLite">
+    <img src="https://img.shields.io/badge/geometry-COLMAP%20%2B%20Open3D-28CEEF.svg" alt="COLMAP and Open3D">
+    <img src="https://img.shields.io/badge/model-Nebius%20%C2%B7%20OpenAI--compatible-A9C3CF.svg" alt="Nebius, OpenAI-compatible">
+    <img src="https://img.shields.io/badge/runs-local%20Docker%20Compose-2496ED.svg" alt="Local Docker Compose">
+  </p>
+  <p>
+    <a href="submission/submission-description.md">Submission</a> ·
+    <a href="#-the-homekeeper-loop">The loop</a> ·
+    <a href="#how-the-system-is-built">Architecture</a> ·
+    <a href="#-run-locally">Run locally</a> ·
+    <a href="#truth-boundaries">Truth boundaries</a>
+  </p>
+  <p><sub>Say it → HomeKeeper saves a real record → it lands on the real object in 3D → ask, care, or be guided to it</sub></p>
+</div>
 
-## Run locally with Docker
+> [!IMPORTANT]
+> HomeKeeper runs as one trusted household on your own machine. Its assistant is labelled **Alexa+ Simulate**: our own agent, built so the same MCP tools can plug into a real Alexa+ add-on later. It is not a live Alexa+ integration. 3D models, measurements and walking steps are **estimates**, and the Home Guide is **not a verified walking aid** (see [Truth boundaries](#truth-boundaries)).
 
-Requires Docker Compose and Node.js 24 for setup and checks.
+<details>
+<summary><kbd>Contents</kbd></summary>
+
+- [At a glance](#-at-a-glance)
+- [The problem](#the-problem)
+- [The HomeKeeper loop](#-the-homekeeper-loop)
+- [See the product](#see-the-product)
+- [Five things HomeKeeper does](#five-things-homekeeper-does)
+- [From photos to a 3D home](#from-photos-to-a-3d-home)
+- [The Home Guide](#the-home-guide)
+- [The agent and its tools](#the-agent-and-its-tools)
+- [How the system is built](#how-the-system-is-built)
+- [Run locally](#-run-locally)
+- [Verify](#verify)
+- [Privacy and operations](#privacy-and-operations)
+- [Truth boundaries](#truth-boundaries)
+- [Repository map](#repository-map)
+- [License and attribution](#license-and-attribution)
+
+</details>
+
+## 🏠 At a glance
+
+<table>
+  <tr>
+    <td width="20%" align="center"><strong>01 / REMEMBER</strong><br><br>“We have a stainless steel fridge with a 2-year warranty.” Said once, saved as a real record.</td>
+    <td width="20%" align="center"><strong>02 / CAPTURE</strong><br><br>4 to 12 photos of a room become a 3D model you can walk and measure.</td>
+    <td width="20%" align="center"><strong>03 / CONNECT</strong><br><br>Link the fridge record to the fridge in 3D. Pin the spare remote to its drawer.</td>
+    <td width="20%" align="center"><strong>04 / CARE</strong><br><br>“What needs care?” answered from real records. Every change approved by you.</td>
+    <td width="20%" align="center"><strong>05 / GUIDE</strong><br><br>“Put my toy in the center of the table.” Spoken steps through the 3D room.</td>
+  </tr>
+</table>
+
+<p align="center">
+  <img src="submission/assets/film-hero.gif" alt="The real 3D model of the apartment assembling as a hologram, then turning solid under the HomeKeeper logo" width="100%">
+</p>
+
+## The problem
+
+A home runs on a hundred small facts nobody writes down. When does the fridge warranty end? Who fixed the leak, and what did it cost? Where is the spare remote? Which day does the fig get water?
+
+Those facts live in drawers of receipts, scattered chats and one person’s head. Smart-home apps only know the few devices that have Wi-Fi. Notes apps know words, but nothing about *where* a thing actually is. And for anyone who cannot see the room, “it’s on the table by the TV” is not enough to find it.
+
+HomeKeeper asks a narrower question:
+
+> Can you tell your home something once, and have it remembered, attached to the real object, and useful the next time anyone needs it?
+
+## ✨ The HomeKeeper loop
+
+<p align="center">
+  <img src="submission/assets/film-how.gif" alt="Animated diagram: You, the Alexa+ Simulate agent, Home memory and RoomTrace 3D over MCP, feeding records, the 3D Space and the voice guide" width="72%">
+</p>
+
+| Stage | What happens | What cannot happen silently |
+| --- | --- | --- |
+| **Say it** | You speak or type in one conversation. Files can be attached before any item exists. | Nothing is invented: names, dates and costs come only from you or your documents. |
+| **Save it** | The Alexa+ Simulate agent reads your current home memory, then calls real MCP tools such as `save_home_item`, `save_memory`, `save_task`. | Memory removal, task cancellation and stopping care always ask first. Review mode asks for everything. |
+| **Place it** | A record links to a model object in your 3D Space, or remembers a location inside it (“lower kitchen drawer, left side”). | Names never auto-link: a person confirms which object is which, per model revision. |
+| **Use it** | Ask what needs care, log a repair with its real cost, or ask the Home Guide to talk you to the table. | Care reviews are enforced read-only. Guidance stops when tracking is lost or stale. |
+
+## See the product
+
+Every screenshot is a frame from a screen recording of the real app running locally, using the Aria apartment Space described in [License and attribution](#license-and-attribution).
+
+### Conversation and records
+
+| One conversation | Said once, saved | The item’s passport |
+| --- | --- | --- |
+| ![HomeKeeper home: What can I take care of? with voice composer and suggestions](submission/screenshots/conversation-home.jpg) | ![The fridge and fig saved from one sentence](submission/screenshots/conversation-saved.jpg) | ![Stainless steel fridge passport with details, care, files and history](submission/screenshots/item-passport.jpg) |
+| The whole app starts as one calm question, over HomeKeeper’s wave-line wallpaper. | “All set.” The fridge, its warranty and a Sunday watering routine became real records. | Each thing gets a passport: identity, care, files and a chronological history. |
+
+### Spaces: your home in 3D
+
+| Photos in | A 3D model out | Compare with the source photo |
+| --- | --- | --- |
+| ![Twelve photos in the Spaces upload tray](submission/screenshots/spaces-upload.jpg) | ![Aria apartment model in Spaces](submission/screenshots/spaces-model.jpg) | ![Photos panel aligning a fisheye source photo with the model](submission/screenshots/spaces-photos.jpg) |
+| 4 to 12 overlapping photos, or one video. | A structured model with walls, glazing, furniture and fittings. | Every object keeps its evidence: the real photos it came from. |
+
+| Walk to an object | First-person walkthrough | Measure in metres |
+| --- | --- | --- |
+| ![Top view with a walkthrough route to the dining table](submission/screenshots/walkthrough-route.jpg) | ![First-person walkthrough view toward the dining table](submission/screenshots/walkthrough-pov.jpg) | ![Measure panel: dining table to coffee table, 3.287 m](submission/screenshots/measure.jpg) |
+| “dining table · 2.69 m · about 5 steps”, from a 65 cm step length you can change. | Walk the model at eye height. | Pick two points: 3.287 m, an estimate from the model. |
+
+### Connect, care, remember
+
+| Link an object | Remember where it is stored | Care, by voice |
+| --- | --- | --- |
+| ![Objects panel linking the refrigerator to the stainless steel fridge record](submission/screenshots/link-object.jpg) | ![Storage location: spare TV remote inside the lower drawer, left side](submission/screenshots/storage-location.jpg) | ![Care review answer listing what needs care next](submission/screenshots/care-review.jpg) |
+| The 3D fridge is now *the* fridge. Tasks and maintenance can be pinned to it. | The drawer is the container; the remote is the stored item. | “Review my home. What needs care next?” |
+
+| Approve before saving | The repair, with its real cost | Memory you can correct |
+| --- | --- | --- |
+| ![Save to your home? approval card for the drain hose repair](submission/screenshots/care-approval.jpg) | ![Home history: Replaced drain hose, USD 85.00](submission/screenshots/home-history.jpg) | ![Editing a saved memory](submission/screenshots/memory-edit.jpg) |
+| Review mode shows exactly what will change. | Symptom, cause, part, provider and $85 stay on the fridge’s record. | Every fact is inspectable and editable. |
+
+### Home Guide
+
+| Voice guide | Debug view: camera ⇄ 3D model |
+| --- | --- |
+| ![Home Guide on the Aria replay saying Be careful, three steps forward, there is a table](submission/screenshots/guide-replay.jpg) | ![Debug view: the camera frame beside the synchronized 3D model view](submission/screenshots/guide-debug.jpg) |
+| Two buttons, Talk and Camera. Short spoken steps. | The same moment in the camera and in HomeKeeper’s 3D model, side by side. |
+
+## Five things HomeKeeper does
+
+<table>
+  <tr>
+    <td width="50%"><img src="submission/assets/film-remember.gif" alt="A spoken sentence becomes three record cards that fly onto the real objects in the 3D model"><br><sub><strong>1 · Remember.</strong> One sentence becomes records for the fridge, the fig and the spare remote, then each lands on its real object in 3D.</sub></td>
+    <td width="50%"><img src="submission/assets/film-json.gif" alt="architecture.json typing out while each object builds in 3D"><br><sub><strong>2 · Capture.</strong> The agent writes the room as JSON; every line becomes geometry. 317 objects for the Aria apartment.</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="submission/assets/film-measure.gif" alt="Two points picked on the model with the distance formula worked out to 3.287 m"><br><sub><strong>2 · Measure.</strong> Pick two points; the distance is plain geometry on the model’s coordinates.</sub></td>
+    <td width="50%"><img src="submission/assets/film-connect.gif" alt="Clicking the fridge, linking it to the saved item, then the drawer opening to show the remote"><br><sub><strong>3 · Connect.</strong> Click an object, link it to a saved item, and say what is stored inside.</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="submission/assets/film-care.gif" alt="Confirming the $85 drain hose repair, which flies onto the fridge"><br><sub><strong>4 · Care.</strong> Confirm the repair; the $85 drain hose joins the fridge’s history.</sub></td>
+    <td width="50%"><img src="submission/assets/film-guide.gif" alt="Home Guide: phone, synchronized debug view and the 3D route to the table in front of the TV"><br><sub><strong>5 · Guide.</strong> Spoken steps, a debug view in sync with the 3D model, and the route to the table in front of the TV.</sub></td>
+  </tr>
+</table>
+
+| HomeKeeper capability | What it does | Why it matters |
+| --- | --- | --- |
+| **One conversation** | Belongings, plants, fixtures, appliances, preferences, contacts, shopping, chores, documents and repairs, all from one composer. Voice dictation and read-aloud use the browser’s speech service. | Nobody learns a filing system. You just say it. |
+| **Persistent memory over MCP** | Every model step reads current household memory through the real MCP endpoint. Earlier conversations are searchable. Corrections update existing facts instead of duplicating them. | A new conversation still knows your home. |
+| **3D Spaces** | Photos or a video become a structured architectural model with photo textures, alignment, metre measurements, assets and walkthroughs. MapAnything is an alternative engine. | Your records gain a *where*. |
+| **Records on real objects** | Link a model object to a saved item, pin tasks and maintenance to it, or save a storage location inside a container, then reopen it as a focused 3D view. | “Where is it?” has an answer you can see. |
+| **Care with consent** | On-demand, read-only care reviews; repairs keep outcome, provider, parts and exact cost; review mode for every change. | The record stays true, and stays yours. |
+| **Home Guide** | Talk and Camera. Camera stills are matched against a saved, calibrated room; the guide replans a route to the target and speaks short steps. | A home you can ask your way around. |
+
+## From photos to a 3D home
+
+<p align="center">
+  <img src="submission/assets/film-json.gif" alt="architecture.json written by the agent, each object building in 3D" width="80%">
+</p>
+
+1. **Capture.** Add 4 to 12 overlapping photos, or one video, in **Spaces → New space**.
+2. **Calibrate.** RoomTrace runs COLMAP feature tracks and estimated camera calibration. A known distance, marked in two photos, can set real scale.
+3. **Author.** The structured model is written as `architecture.json` through RoomTrace’s MCP tools (from your Codex conversation): slabs, walls with openings, stairs, and every object as a box or solid in metres, each with the photos that support it.
+4. **Build.** RoomTrace publishes a revision as `surface.glb`, one mesh per modeled object. Spaces renders it with three.js.
+5. **Use.** Walk it, measure it, compare it with the source photos, and link its objects to your records.
+
+```json
+{ "id": "fridge_body", "kind": "box", "position": [1.04, 0.95, 6.03], "size": [0.72, 1.9, 0.68] }
+```
+
+<sub>A real element from the Aria apartment Space: a stainless refrigerator 0.72 m wide and 1.9 m tall, supported by three source photos.</sub>
+
+**Measuring** is geometry on those coordinates. From the dining table (2.900, 0.765, 2.600) to the coffee table (6.146, 0.435, 2.200): Δx 3.246, Δy 0.330, Δz 0.400, so d = √(Δx² + Δy² + Δz²) = **3.287 m**. Like every dimension here, it is an estimate of the model, not a sensor measurement.
+
+## The Home Guide
+
+<p align="center">
+  <img src="submission/assets/film-guide.gif" alt="Home Guide: the request, the phone guide, the synchronized debug view and the route on the 3D map" width="100%">
+</p>
+
+| Step | What happens |
+| --- | --- |
+| **Ask** | Tap **Talk** once for a hands-free session. Ask naturally: “I want to put my toy in the center of the table, in front of the TV.” |
+| **Find the room** | With **Camera** on, fresh stills are matched against eligible calibrated Spaces on your home server. Ambiguous or incomplete matches are refused, never guessed. |
+| **Find the target** | The agent resolves the destination from your saved records and the model (`read_guide_room`, `set_guide_target`, `resolve_guide_location`). |
+| **Speak the route** | A local guidance endpoint replans once per second from the current pose and speaks only changed instructions: “Two steps forward.” “Be careful. Three steps forward, there is a table.” “Table ahead. Stop here.” |
+| **Stay honest** | Lost or stale tracking, a changed model or a reported obstacle clears guidance. Physical clearance is never certified. |
+
+`/?view=guide&debug=1` shows the camera frame beside a synchronized virtual view of the 3D model, the pose, the target and the route. The prerecorded demo at `/?view=guide&replay=aria` plays a **scripted** route on Aria footage, so the full experience can be seen without a calibrated room; it is labelled as a simulation in the app.
+
+## The agent and its tools
+
+| The Alexa+ Simulate agent can | It cannot |
+| --- | --- |
+| Read current household memory before every step (`get_home`, `get_passport`, `read_document`). | Invent a record, a date, a cost or a completed action. |
+| Save and update records (`save_home_item`, `save_memory`, `save_task`, `schedule_maintenance`, `report_issue`, `resolve_issue`, `file_document`, `record_history`). | Delete memory, cancel a task or stop care without your confirmation. |
+| Link records to 3D objects and storage locations (`link_space_object`, `save_spatial_location`, `save_spatial_task`, `schedule_spatial_maintenance`). | Decide that a model object *is* your item because the names match. |
+| Search earlier conversations (`search_conversations`) and offer up to three next steps (`suggest_next_steps`). | Run a suggestion until you select it. |
+| Guide: list and read rooms, set a target, rehearse a route (`list_guide_rooms`, `read_guide_room`, `set_guide_target`, `rehearse_guide_route`). | Claim a physical position without a fresh, matching camera pose. |
+
+## How the system is built
+
+<p align="center">
+  <img src="submission/assets/homekeeper-architecture.gif" alt="Animated architecture: Remember, Capture to 3D, and Guide flows through the HomeKeeper host, the model provider and the MCP services" width="100%">
+</p>
+
+```text
+React browser (Conversation · Spaces · Home Guide)
+  -> alexa_host/server.js        localhost, origin/host checks, NDJSON streaming
+      -> agent.js -> model provider (Nebius, OpenAI-compatible) -> MCP client
+                                    -> capability/server.js -> tools.js -> store.js -> SQLite
+      -> /roomtrace/api/          -> RoomTrace (Python FastAPI): captures, geometry, GLB
+  Codex conversation -> features/roomtrace/app/mcp_server.py -> structured modeling
+```
+
+| Technology | Role in HomeKeeper |
+| --- | --- |
+| **React 19.3 · Vite 8.3** | One frontend build: the conversation, record drawers, Spaces and the Home Guide. |
+| **three.js 0.180 · React Three Fiber** | The 3D Space viewer, walkthroughs, measurement and the guide’s debug view. |
+| **Node.js 24 · Express** | `alexa_host/`: the local conversation host, agent loop, guide endpoints and RoomTrace gateway. |
+| **Model Context Protocol** | The official MCP SDK over Streamable HTTP between the agent and the capability server; RoomTrace exposes its own MCP tools for modeling. |
+| **SQLite** | `capability/`: transactions, uploaded originals, page text, history and export. |
+| **Nebius (OpenAI-compatible)** | Reasoning and tool choice; a vision model (`NEBIUS_VISION_MODEL`) for camera stills. No model is hardcoded. |
+| **Python · FastAPI · COLMAP · Open3D** | `features/roomtrace/`: uploads, calibration, structured geometry, localization and walkthroughs. |
+| **Docker Compose** | Three services, non-root, read-only filesystems, dropped capabilities, loopback-only ports. |
+
+## 🚀 Run locally
+
+Requires Docker Compose, and Node.js 24 for setup and checks.
 
 ```sh
 npm ci
 npm run setup
-# Edit .env privately and add your three NEBIUS values.
+# Edit .env privately and add your NEBIUS_API_KEY, NEBIUS_BASE_URL and NEBIUS_MODEL.
 docker compose up --build -d
 ```
 
-Open http://localhost:8789. Spaces is in the left navigation. The MCP capability endpoint is http://localhost:8788/mcp and requires the generated HOMEKEEPER_TOKEN bearer credential. Both published ports bind only to loopback. The RoomTrace geometry service stays inside the Compose network.
+Open **http://localhost:8789**. Spaces is in the left rail; the Home Guide is the beacon icon, or `/?view=guide`. The capability MCP endpoint is `http://localhost:8788/mcp` and requires the generated `HOMEKEEPER_TOKEN`. Both ports bind to loopback only; RoomTrace stays inside the Compose network.
 
-If your .env already exists, setup preserves its values and adds missing settings. It never prints a key. Never paste a secret into browser code or a conversation. After changing .env:
+`NEBIUS_BASE_URL` must be the OpenAI-compatible API root ending at `/v1`, and `NEBIUS_MODEL` a model that supports function calling. Home records and forms work without a model; the conversation shows that configuration is missing instead of pretending. After changing `.env`, run `docker compose up -d --force-recreate local-host`.
 
-```sh
-docker compose up -d --force-recreate local-host
-```
-
-Home records and forms work without a model. The conversation shows missing configuration instead of pretending to be intelligent. Set NEBIUS_MODEL to a Nebius model that supports function calling. NEBIUS_BASE_URL must be its real OpenAI-compatible API root, ending at `/v1`, not a chat-completions path. No model is hardcoded.
-
-## Use HomeKeeper
-
-### Spaces
-
-Open **Spaces** in the left rail to create or open a 3D space. Its native React workspace lives under `web/spaces/`, including photo/video intake, structured architectural modeling through Codex MCP, the explicit MapAnything alternative, texture authoring, photo alignment, measurements in metres, and model walkthroughs. It uses the same typography and colors, with one HomeKeeper navigation rail. Returning to Conversation preserves your draft. Leaving Spaces stops its camera by unmounting the workspace; reopening restores the selected space.
-
-There is one React application and one frontend build. Spaces loads on demand in HomeKeeper’s own React tree. The host streams `/roomtrace/api/` requests to the Python service, including uploads, images and GLB downloads. Household records and geometry have separate stores. Structured generation still runs through Codex using the supplied modeling request; HomeKeeper's Nebius conversation is not silently given modeling tools. There are no hosted generation APIs or Pascal connections. Estimated geometry and step counts do not establish physical accuracy or a verified walking route.
-
-
-### Connecting Spaces to household records
-
-Use a human-confirmed link when a modeled object represents an item in **Your home**. Select the object in Spaces, then explicitly choose the existing household item it represents. A matching name, appearance or model label is not enough to identify the item automatically.
-
-- **Open an item passport:** select the linked object and open its HomeKeeper passport to see the saved item records.
-- **Create care work:** from that linked object, create a task or schedule maintenance for the linked item. The work retains the selected space/object anchor. Supply the actual due date and maintenance details yourself; saved dates do not send notifications.
-- **View source photos:** use the object's existing evidence/photo controls to open the real RoomTrace capture photos supporting that object. These are source images, not a new image generation or live camera view.
-- **Remember where an item is stored:** select the model object representing its container or location, explicitly choose the household item being stored, and enter the location detail, such as “top shelf, left drawer.” The stored item and its container are different roles; do not link the container's passport to the stored item just to save a location. The saved location belongs to the stored item and retains the selected space/object anchor. Recall it through HomeKeeper memory or the item passport, then use **View in 3D** to reopen that object in Spaces. Editing the location text keeps its spatial anchor.
-
-Links and location anchors live in the household database; RoomTrace keeps its separate geometry store. If a model revision changes, confirm an item link against the current object before adding new pinned care records. A saved anchor refers to a model object, not live tracking: HomeKeeper cannot detect that an item moved, locate it from a new camera view, or verify its shelf/drawer. Location text comes from the household. Model geometry, dimensions and walkthroughs remain estimates, not sensor-verified measurements, physical localization or verified walking routes. These features retain the single-household, local-only deployment limits described below.
-
-### Mobile Home Guide
-
-Open the sidebar's **Home Guide microphone icon** or `/?view=guide` for experimental room tracking and spoken household context. The icon has a hover/focus tooltip and an accessible Home Guide label. This is not independent blind navigation or an Alexa service.
-
-- Two primary controls: **Talk** and **Camera**. Spoken requests go to the existing Nebius household agent, which recalls saved items, lists/selects rooms through real RoomTrace tools, and asks spoken clarifying questions. There are no item/room selectors or route forms.
-- Tap Talk once to start a hands-free session. Listening pauses during requests and spoken replies, then resumes automatically. Say “open camera”, “close camera”, “repeat”, or “stop” while listening. Browser microphone/camera permission may require a tap. Browser speech recognition may use its provider's servers; recognized text and agent responses are stored in conversation history.
-- Camera opens a local preview. While it is enabled, each question sends one fresh, downsized JPEG still to the configured AI provider; it does not upload a continuous video stream. Photo turns use `NEBIUS_VISION_MODEL` (default `moonshotai/Kimi-K2.6`); text-only turns keep `NEBIUS_MODEL`. Both use the existing Nebius endpoint/key. [Nebius documents Kimi-K2.6 vision and tool support](https://nebius.com/services/token-factory/models/kimi-models-inference). Provider pricing and image-retention policies apply. JPEG attachments are transient, not saved in chat history; the AI's textual descriptions are saved. Unsupported image requests fail explicitly without a substitute visual answer.
-- Selecting a saved room by voice and opening Camera starts repeated, non-overlapping image localization against that room. Accepted fresh camera poses update the virtual position/orientation; no calibrated landmarks, a lost match, stale observation or model change clears the current pose and route. Localization images stay on your home server in RoomTrace's bounded history of 64 recent observations; continuous frames are not sent to the AI provider.
-- With no fresh selected-room match, Camera searches eligible calibrated Spaces and refuses ambiguous or incomplete matches rather than choosing the first room. Under **Privacy & help**, record each side of an authored doorway with fresh localization, select its floor, and explicitly confirm the association. Cross-room guidance stops at the recorded approach; the next room must be recognized before it continues. Connections do not establish a safe crossing or a shared metric coordinate frame.
-- Optional **visible-obstacle observation** sends fresh stills to the configured vision provider every few seconds only after checkbox consent. A reported obstacle pauses model guidance; say “resume model guidance” to resume estimates. Unknown results never certify clearance. This cannot reliably detect all hazards, hidden objects, steps, or drop-offs.
-- Structured captures attempt COLMAP feature tracks and estimated camera calibration. In **Name, camera & measured scale**, select two overlapping photos and mark the same measured endpoints in each; supply distance, uncertainty and measurement provenance. Scale stays unknown unless those endpoints match triangulated tracks. Registering that evidence to the authored model still requires genuine source/model anchors and held-out checks; typed dimensions alone cannot make a room guide-ready.
-- The read-only guide selects a saved item's modeled container. With a fresh matching pose, the normal Guide polls a local deterministic guidance endpoint once per second, replans from the current position and heading, and speaks changed model-route instructions without an AI request for every update. Different starts and destinations reuse the same calibrated room; there are no per-room scripted paths. Turns in place are considered, too. Lost/stale tracking, changed targets/revisions and route failures clear guidance. Instructions describe estimated model segments, not safe physical walking or measured step counts. Saved locations are household reports, not live item tracking; missing or moving obstacles remain unknown.
-- Text-only item locations can nominate current modeled containers/rooms, but matching labels do not establish spatial links. Home Guide asks for confirmation of an exact candidate before saving its model anchor; a changed model requires reconfirmation from current geometry. Room-only records cannot invent a container or route. Confirmation preserves the existing item, location text and supporting source, with revision checks against concurrent edits. Fresh-still item descriptions are reported separately from saved locations: they do not prove movement or placement and never automatically overwrite memory.
-- Open `/?view=guide&debug=1` for camera/model comparison, synchronized virtual POV, room overview, pose/match diagnostics, target and route. Debug reference-room/target selectors do not establish physical location. Supported browsers can start WebXR AR tracking with an explicit tap; raw-camera access and successful model alignment are required. Unsupported devices keep lower-rate image localization with no inertial motion prediction. Stop, exit or background the page to end tracking.
-- Append `&space=<map-id>` to preselect a structured Space without asserting a physical match. For the existing `example manual` capture: `/?view=guide&debug=1&space=ecc1c20c1b0340468c284e2b4fb86e4b`. This capture currently has no localization landmarks, so it can show the model but cannot supply a live aligned position until calibrated.
-- Model alignment requires real photo calibration: at least eight shared non-coplanar 3D landmarks observed in two calibrated source photos. A structured 3D draft alone is insufficient. Debug shows an explicit calibration warning and offers **Build index from saved calibration**; this uses existing evidence, never invented landmark positions. Without an index, the room remains inspectable but current position stays unknown.
-- WebXR combines raw-camera geometric matching with device visual-inertial poses. It re-matches every four seconds, expires map alignment after twelve seconds, and discards alignment on reference resets, large drift, frame loss or model changes. Continuous XR alignment requires a usable metric map scale; otherwise it returns to camera-only matching. The debug display uses an approximate 60° lens; it is not pixel-perfect AR registration. Continuous mode requires WebXR raw camera access; DOM overlay is additionally needed to see the debugger inside an immersive session. Safari and unsupported hardware fall back to slower camera matching.
-- Raw pose context is run-local and expires after five seconds; it is not saved as chat telemetry. The selected Space/destination and the AI's text replies are saved. Estimated progress is the decrease in model-route distance, not independently measured walking distance. Local source observations remain subject to the 64-image retention described above.
-- New architecture revisions automatically attempt photo fitting and landmark-index preparation before publication, recording `guide_readiness` and missing-evidence reasons. An existing guide shows those reasons without adding a screen. Automation consumes genuine photo/landmark/calibration evidence: ordinary uncalibrated photos and an estimated model do not become calibrated just by publishing. Readiness is experimental localization readiness, never physical safety certification. Existing Aria replay and its scripted path remain separate and unchanged.
-- During a hands-free session, including spoken replies, Talk becomes **Stop**. Tap it to interrupt; say “stop” while listening, or leave/background the page to stop sensors and silence pending responses. Cancellation suppresses replies locally; an already-started read-only provider request may finish on the server.
-
-Mobile camera access requires a secure browser context. The default loopback deployment is not directly reachable from a phone; do not expose or tunnel this unauthenticated household server publicly. Authenticated HTTPS deployment is a separate prerequisite. Physical positioning accuracy, device speech, camera hardware and assistive-technology usability require on-device evaluation with blind participants and mobility specialists before any mobility use.
-
-#### Prerecorded Aria voice demo
-
-Open `http://localhost:8789/?view=guide&replay=aria`, then tap **Camera**. The 16-second slowed replay now runs a **scripted simulation**: “Two steps forward,” then at eight seconds “Be careful. Three steps forward, there is a table,” then “Table ahead. Stop here.” Native speech pauses the video and the virtual camera; only successful speech completion resumes the midpoint. The final frame stays frozen. Stop/background/exit cancels playback and speech.
-
-`/?view=guide&debug=1&replay=aria` shows the same video timeline driving an authored moving camera, coffee-table target, path and progress in Space `710631bacf4547c69b02c08f1a6a8b55`, revision 1. The **Simulation** badge identifies scripted cues and coordinates, not measured steps, localization or reconstructed video poses. This path cannot be applied to other Spaces/revisions. Live-camera pages remain unchanged and require their own calibration. No camera permission, localization or WebXR is used for the simulation.
-
-Scripted playback needs browser speech support but no AI credentials. Optional Talk/current-frame questions still use the configured vision provider and microphone; each sends a still image, not the whole clip. Existing `.env` credentials and an image/function-calling-capable `NEBIUS_VISION_MODEL` are required for those questions. Provider retention rules apply; image bytes are not stored in chat history.
-
-Native hosts read `data/video_previews/aria/dino-demo-79-83-slow.mp4`, alongside `CREDITS.txt`; the original four-second clip is retained separately. Set `GUIDE_REPLAY_DIR` to a different local directory if needed. Docker Compose mounts `${GUIDE_REPLAY_DIR:-./data/video_previews/aria}` read-only at `/app/replay-media` and sets the host's internal `GUIDE_REPLAY_DIR` to that mount; recreate local-host after changing the mount. The host serves only the fixed slow clip at `/api/guide-replay/aria.mp4` with native HEAD/byte-range streaming; `/api/guide-replay` returns metadata, credit and license link. No arbitrary file path or remote media URL is accepted.
-
-Credit: **Aria Digital Twin Dataset, Meta Reality Labs Research**. Read the [Aria Digital Twin Dataset license](https://www.projectaria.com/datasets/adt/license/) and retained `CREDITS.txt` before use. This demo is local, private research only; do not publicly publish, redistribute or expose this unauthenticated app. No new license or public redistribution permission is granted by HomeKeeper.
-
-
-
-For native local execution, install the Python requirements and build HomeKeeper:
+<details>
+<summary><strong>Native (no Docker)</strong></summary>
 
 ```sh
 python3 -m venv .venv
@@ -93,63 +268,42 @@ npm run build
 npm run start:all
 ```
 
-`npm run start:all` starts records, geometry and the host together and stops them together. `npm start`, `npm run capability` and `npm run roomtrace` start individual services. RoomTrace's native port defaults to 8790. `ROOMTRACE_URL` selects its upstream address when using a different port. Python configuration and the MCP server read HomeKeeper's root `.env`; credentials stay server-side. See [RoomTrace setup and MCP](features/roomtrace/README.md).
+`npm run start:all` starts records, geometry and the host together. RoomTrace’s native port defaults to 8790. Run either native services or Compose against the same data, not both.
 
-Local captures, revisions and asset blobs live in `features/roomtrace/data/`, which is ignored by Git and mounted into the RoomTrace container. Existing captures were copied here from the previous local workspace without changing the originals. A fresh clone contains no private home captures. Back up this directory in addition to the household/chat Docker volumes, with services stopped for a consistent backup. Downloaded engine weights live in `features/roomtrace/models/`. Setup records your local UID/GID so the non-root geometry container can write these bind-mounted directories. Run either native services or Compose against this data, not both at once.
+</details>
 
-Start in the conversation. Tell it what to remember or what you need done. For example: ask it to remember a plant's location, keep a shopping list, schedule a recurring chore, find a household contact, summarize upcoming work or recall a previous repair. These are open-ended model requests, not hardcoded routes.
+<details>
+<summary><strong>Structured modeling through Codex MCP</strong></summary>
 
-Saved home items cover furniture, rooms, plants, fixtures, systems and appliances. Facts, preferences, contacts and locations have their own persistent records. Shopping and tasks can have no due date, a one-time date or a user-selected recurrence. The agent can reason, plan and draft without saving a record when that is what you ask for.
+Start HomeKeeper first, then register `features/roomtrace/app/mcp_server.py` with the Python interpreter that has the RoomTrace requirements. It reads the root `.env` and calls HomeKeeper’s gateway. Spaces gives you the exact request to paste into that conversation. See [features/roomtrace/README.md](features/roomtrace/README.md).
 
-Every model step reads current household memory through the real MCP endpoint. A new conversation retains these facts. The agent can also search actual earlier conversation text. Corrections update existing memories rather than creating a second competing fact. There is no vector database or hidden canned answer path.
+</details>
 
-New browser conversations use direct saving for explicit requests. The composer checkbox, Review before saving, switches this conversation to approval mode. The API preserves review-first behavior when no mode is supplied. Removing memory, cancelling tasks and stopping maintenance always require confirmation. Read-only care reviews cannot call write tools. Completed writes survive interruptions; retried writes use idempotency keys. Approvals and tool errors are distinct outcomes. The host supplies request IDs and never treats an invented record ID as a new item.
+<details>
+<summary><strong>Prerecorded Aria guide demo</strong></summary>
 
-The desktop icon rail opens compact panels for Your home, Care & tasks, Files, Memory and Home history. Lists have search and pagination. Add an item with just its name; optional identity fields stay under More details. Complete work with one click using the household date. Existing care plans can be edited without duplicating them. A passport offers a grounded service brief ready to copy and share yourself. Removing a memory removes it from active structured memory; old conversations, operation history and backups retain their copies.
+Open `http://localhost:8789/?view=guide&replay=aria` and tap **Camera**. The slowed replay runs a scripted simulation: “Two steps forward”, “Be careful. Three steps forward, there is a table”, then “Table ahead. Stop here.” `/?view=guide&debug=1&replay=aria` shows the same timeline driving the 3D view. The host reads `data/video_previews/aria/dino-demo-79-83-slow.mp4` with its `CREDITS.txt`; set `GUIDE_REPLAY_DIR` to use another local directory.
 
-For a problem with a home item, record the symptom, consult its documents and prior history, then record the actual repair. Resolution closes the issue and preserves work, parts, provider and paid costs in the same passport. This continuous history is HomeKeeper's focus, including for things with no smart-home connection.
+</details>
 
-Attach a searchable PDF or UTF-8 text file in the composer and send it to organize it. The real model reads its pages, matches or registers the physical item, and files the original using file_document. Files can be uploaded before any item exists. Removing an attachment chip removes it from that message; the uploaded original remains in Files. Uploads preserve the original and readable pages. Scanned PDFs need OCR outside the app. Costs are integer minor currency units, totalled separately per currency. Warranty dates and repair details are user-reported. Recurring work advances from the reported completion date. Saved due dates are visible when you open or ask the app; they do not trigger delivered notifications.
+## Verify
 
-Click What needs care? or Review my home for an on-demand, read-only review of actual tasks, manuals, symptoms, reported warranty dates and repair spending. The model can offer up to three next-step buttons. Each button sends exactly its visible request when selected, using the conversation's normal permissions. Suggestions never execute automatically. This uses the existing Nebius tool loop. It does not run in the background or invent a health score.
-
-Download item history from an item's History section for a plain-text record of identity, open issues, care, actual repairs, parts, providers, costs and document titles. This exports the saved facts without another model call or contacting a service provider. Original documents remain separate downloads.
-
-The desktop theme follows the inspected Alexa website: dark canvas, blue glow, Alexa Sans typography, compact icon rail, central composer and right drawer. HomeKeeper has its own house/loop mark. Font provenance is in web/assets/README.md.
-
-## What is actually integrated
-
-- Real Nebius Chat Completions for reasoning and tool selection.
-- Official MCP SDK, Streamable HTTP, discovered schemas, real tool calls and returned results.
-- Real SQLite persistence, transactions, uploaded originals, page text and exports.
-- Optional browser dictation and read-aloud use the browser's own speech implementation. Availability varies. Dictation may send audio to the browser vendor. HomeKeeper does not include an Amazon speech service.
-
-This local host is not Amazon Alexa+. No Echo device, Amazon account, Alexa+ add-on, booking company, parts vendor or payment processor has been connected. HomeKeeper cannot search the web, verify parts compatibility, book appointments, buy parts or claim live availability. It can prepare a factual service brief and record what the user later reports. It ships no sample home and no provider mocks.
-
-For a genuine Alexa+ deployment, follow the official onboarding links in RESEARCH_AND_PLAN.md. The capability server's data-only tools are designed for MCP clients. Public use still requires HTTPS, user identity/household isolation and an OAuth 2.1 account-linking provider. Do not tunnel this single-household local deployment and call it production Alexa+. A custom MCP App iframe is intentionally omitted; Alexa can render data-only results after real onboarding.
-
-## Architecture and files
-
-```text
-React browser
-  -> alexa_host/server.js (localhost, origin/host checks)
-      -> forms/uploads -> capability/server.js
-      -> agent.js -> Nebius -> MCP client -> capability/server.js
-                                                -> tools.js -> store.js -> SQLite
-  -> Spaces (web/spaces) -> /roomtrace/api/ -> Python API -> captures and geometry
+```sh
+npm test                 # node --test tests/*.test.js
+npm run build
+npm run check:browser
+npm run check:roomtrace
+npm run check:live       # needs real Nebius credentials; uses an isolated temporary home
 ```
 
-`capability/` is the requested Alexa-style capability container folder. `alexa_host/` is the local conversation host. `features/roomtrace/` owns the geometry service and its tests. `web/spaces/` owns the native modeling page and scoped styles. The host retains conversation transcripts in its own volume; only the capability service owns household records. All tool definitions and direct form writes use the same validation and commands. No ORM, vector database, agent framework or graph database is needed for this scope.
-
-The research and implementation decisions are in RESEARCH_AND_PLAN.md. Product constraints are in PRODUCT.md. The interface is documented in DESIGN.md.
+The system suite covers authenticated intake, original-file preservation, atomic filing, care-plan revisions and export; the permission check asserts that read-only reviews cannot write. The live check exercises model-selected writes, rejection, approval, corrections, routines, restart recall, document reads, repair history and conversation search. Results and history are in [VERIFICATION.md](VERIFICATION.md).
 
 ## Privacy and operations
 
-Home records, transcripts and document originals live in local Docker volumes. Current household records and the active conversation enter each configured AI provider request. Earlier conversation excerpts and document text enter requests when their tools are used. In Home Guide, an enabled camera also sends a fresh still image with each question. The host accepts only JPEG data URLs of at most 1 MiB decoded bytes, captured no more than ten seconds ago and not in the future. The image is available only during that request's tool loop: it is not saved in the conversation database, returned in the session, or replayed on retry/later turns. User text and AI descriptions remain in conversation history. This does not promise deletion by the external provider; its retention policy applies. Separate RoomTrace matching retains recent observation photos locally. Do not store passwords or access codes here. No API key is returned to the browser or stored in the conversation database. This is one trusted local household, with no multi-user accounts or encryption-at-rest claim. Protect the machine and backups accordingly.
-
-Replay stills use the same bounded JPEG and ten-second snapshot freshness contract as camera stills. `captured_at` is the current extraction time; optional `guide_replay: { id: "aria-dino", time_seconds: 79..83 }` identifies the prerecorded source time, not when the recording happened. Replay provenance is accepted only with an image on a new `guide: true` message, never with live `guide_context`, retry or an approval decision. Both the image and structured provenance are run-local, omitted from saved sessions and absent from retry/later provider requests. Text requests and AI replies remain stored under the existing conversation privacy rules.
-
-Use Export records for portable JSON including all passports and base64 original documents. For complete restoration, retain Docker-volume backups. Stop services for a consistent filesystem backup, archive both volumes, then restart. Export is one-way; JSON import is intentionally absent.
+- Home records, transcripts and original documents live in local Docker volumes. Current records and the active conversation are sent to the configured AI provider with each request; its retention policy applies.
+- Camera stills are JPEG only, at most 1 MiB, at most ten seconds old, used for one request and never saved in chat history. RoomTrace keeps up to 64 recent localization observations locally.
+- No API key reaches the browser or the conversation database. Uploads are limited to 12 MB and 500 PDF pages; remote URL fetching is not offered.
+- **Export records** produces portable JSON with every passport and the original documents. For full restoration, back up the volumes:
 
 ```sh
 docker compose stop
@@ -159,24 +313,33 @@ docker run --rm -v homekeeper_chat-data:/data:ro -v "$PWD/backups:/backup" alpin
 docker compose start
 ```
 
-Restore into stopped, empty volumes by extracting the respective archive at each volume root. Backups contain private household information. Keep them outside source control. `docker compose down` preserves records. `docker compose down -v` deletes them.
+`docker compose down` keeps records; `docker compose down -v` deletes them. Backups contain private household information; keep them out of source control.
 
-MCP_REQUEST_TIMEOUT_MS is 900000 (15 minutes) because the MCP SDK requires a finite deadline. There is no added model-response timer or automatic retry. MAX_AGENT_ROUNDS bounds paid tool-loop work; reaching it preserves the transcript and offers Continue. Requests can stay active while a slow provider responds. A failed provider call returns an explicit error, never a substitute answer.
+## Truth boundaries
 
-The services use non-root containers, read-only filesystems, dropped capabilities and runtime-only secrets. HTTP errors avoid exposing keys or raw provider response bodies. Uploads accept up to 12 MB and 500 PDF pages, with a 2-million-character text limit. Remote URL fetching is not offered, avoiding an unnecessary server-side request-forgery surface.
+- **Alexa+ Simulate is our own agent.** No Echo device, Amazon account, Alexa+ add-on, booking company or payment processor is connected. The capability server’s MCP tools are designed to be the integration surface when real Alexa+ access exists.
+- **Geometry is an estimate.** Models, dimensions and step counts come from photos and authored structure, not sensors. A model anchor is not live item tracking: HomeKeeper cannot detect that something moved.
+- **The Home Guide is experimental and not a verified walking aid.** It cannot detect every obstacle, step or drop-off, and it needs on-device evaluation with blind participants and mobility specialists before any real mobility use. The Aria replay is a scripted simulation.
+- **One trusted household, locally.** There are no multi-user accounts or encryption-at-rest claims. Public use needs identity, authorization, HTTPS and real platform onboarding; do not tunnel this server publicly.
+- **No invented data.** The app ships no sample home and no provider mocks. Dates, costs and locations come from the household.
 
-## Verification
+## Repository map
 
-Native Spaces has passed the HomeKeeper system and browser suites, the Python API boundary check, camera/capture/walkthrough checks, actual photo uploads, saved-model rendering and MCP calls through the host gateway. Desktop screenshots were inspected, both Docker images built, and the deployed app retained all 11 captures and existing household records. This verifies the local integration; it does not certify physical measurement accuracy, live Nebius reasoning, CUDA execution or a safe walking route. See VERIFICATION.md for the current results and historical checks.
-
-```sh
-npm test
-npm run build
-npm run check:browser
-npm run check:roomtrace
-npm run check:live
+```text
+web/                    React app: conversation, record drawers, Home Guide
+web/spaces/             Spaces: capture, 3D model, objects, measure, walkthrough
+alexa_host/             Local host: agent loop, guide, RoomTrace gateway
+capability/             MCP capability server and SQLite store
+features/roomtrace/     Python geometry service and its MCP server
+scripts/                Setup, start, browser/live/RoomTrace checks
+tests/                  Node test suites
+submission/             Submission description, screenshots and animations
 ```
 
-The live check requires actual Nebius credentials and uses an isolated temporary home, never the user database. It verifies model-selected writes, rejection, approval, household facts, corrections, shopping completion, routine scheduling, restart recall, document reads, repair history and conversation search; it cannot certify Amazon Alexa+ or external booking integrations.
+Product principles are in [PRODUCT.md](PRODUCT.md), the interface in [DESIGN.md](DESIGN.md), research and integration decisions in [RESEARCH_AND_PLAN.md](RESEARCH_AND_PLAN.md).
 
-The system suite covers authenticated intake, original-file preservation, atomic filing, care-plan revisions and export. The agent-permissions check uses controlled provider responses only to assert host authority, including that read-only reviews cannot mutate records. This is not evidence of model quality. The browser check covers the revised desktop, pagination and simplified interactions using an installed Google Chrome and isolated temporary databases. Run `node --env-file=.env scripts/browser-check.js` to also verify real streamed Nebius chat, approval, reload and memory recall through the browser. Set BROWSER_CHANNEL for another supported Playwright browser channel. Uploaded-document tool reads return at most 16,000 characters with page/offset continuation metadata. The UI shows when records will be sent to Nebius.
+## License and attribution
+
+HomeKeeper is licensed under the [Apache License 2.0](LICENSE). Alexa Sans fonts are Amazon assets served locally for this interface; see [web/assets/README.md](web/assets/README.md). HomeKeeper is not endorsed by Amazon.
+
+The demo Space and screenshots use video from the **Aria Digital Twin Dataset, Meta Reality Labs Research** ([license](https://www.projectaria.com/datasets/adt/license/)). Only the video comes from the dataset: the 3D model was generated by HomeKeeper from twelve frames of it. The dataset is licensed for non-commercial research; read `data/video_previews/aria/CREDITS.txt` before sharing anything derived from it.
